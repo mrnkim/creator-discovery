@@ -8,8 +8,8 @@ interface VideoApiResponse {
   _id: string;
   index_id?: string;
   hls?: Record<string, unknown>; // Or a more specific HLS type if available
-  system_metadata?: Record<string, unknown>; // System metadata
-  user_metadata?: Record<string, unknown>; // User metadata
+  system_metadata?: Record<string, unknown>; // Renamed from metadata to system_metadata
+  user_metadata?: Record<string, unknown>; // Added for user metadata
   source?: Record<string, unknown>; // Or a more specific Source type
   embedding?: Record<string, unknown>; // Or a more specific Embedding type
 }
@@ -114,9 +114,9 @@ export async function GET(
     const videoData: unknown = await response.json();
 
     if (requestEmbeddings) {
+
       const typedVideoData = videoData as TwelveLabsVideoData;
       if (typedVideoData.embedding) {
-        console.log(`✅ Successfully retrieved embedding data for video ${videoId}`);
       } else {
         console.warn(`⚠️ No embedding data found in response for video ${videoId}`);
       }
