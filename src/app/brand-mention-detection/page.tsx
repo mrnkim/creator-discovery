@@ -24,7 +24,7 @@ export default function BrandMentionDetectionPage() {
   const [eventsByVideo, setEventsByVideo] = useState<Record<string, ProductEvent[]>>({});
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [videoDurations, setVideoDurations] = useState<Record<string, number>>({});
-  
+
   // Filters
   const [selectedCreators, setSelectedCreators] = useState<string[]>([]);
   const [selectedFormats, setSelectedFormats] = useState<('vertical' | 'horizontal')[]>([]);
@@ -32,13 +32,13 @@ export default function BrandMentionDetectionPage() {
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [durationThreshold, setDurationThreshold] = useState<number>(0.5); // seconds
   const [timeWindow, setTimeWindow] = useState<{ start: number; end: number | null }>({ start: 0, end: null });
-  
+
   // UI state
   const [viewMode, setViewMode] = useState<'library' | 'per-video'>('library');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isEventsLoading, setIsEventsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Modal state
   const [modalVideo, setModalVideo] = useState<{
     videoId: string;
@@ -54,8 +54,8 @@ export default function BrandMentionDetectionPage() {
   const availableCreators = useMemo(() => {
     const creators = new Set<string>();
     videos.forEach(video => {
-      const creator = video.user_metadata?.creator || 
-                      video.user_metadata?.creator_id || 
+      const creator = video.user_metadata?.creator ||
+                      video.user_metadata?.creator_id ||
                       'Unknown';
       creators.add(creator.toString());
     });
@@ -66,8 +66,8 @@ export default function BrandMentionDetectionPage() {
     const formats = new Set<'vertical' | 'horizontal'>();
     videos.forEach(video => {
       if (video.system_metadata?.width && video.system_metadata?.height) {
-        const format = video.system_metadata.width >= video.system_metadata.height 
-          ? 'horizontal' 
+        const format = video.system_metadata.width >= video.system_metadata.height
+          ? 'horizontal'
           : 'vertical';
         formats.add(format);
       }
@@ -99,8 +99,8 @@ export default function BrandMentionDetectionPage() {
     return videos.filter(video => {
       // Filter by creator
       if (selectedCreators.length > 0) {
-        const creator = video.user_metadata?.creator || 
-                        video.user_metadata?.creator_id || 
+        const creator = video.user_metadata?.creator ||
+                        video.user_metadata?.creator_id ||
                         'Unknown';
         if (!selectedCreators.includes(creator.toString())) {
           return false;
@@ -110,8 +110,8 @@ export default function BrandMentionDetectionPage() {
       // Filter by format
       if (selectedFormats.length > 0) {
         if (video.system_metadata?.width && video.system_metadata?.height) {
-          const format = video.system_metadata.width >= video.system_metadata.height 
-            ? 'horizontal' 
+          const format = video.system_metadata.width >= video.system_metadata.height
+            ? 'horizontal'
             : 'vertical';
           if (!selectedFormats.includes(format)) {
             return false;
@@ -139,26 +139,26 @@ export default function BrandMentionDetectionPage() {
   // Filtered events based on selected filters and thresholds
   const filteredEvents = useMemo(() => {
     const result: Record<string, ProductEvent[]> = {};
-    
+
     Object.entries(eventsByVideo).forEach(([videoId, events]) => {
       // Skip if video is not in filtered videos
       if (!filteredVideos.some(v => v._id === videoId)) {
         return;
       }
-      
+
       // Apply filters to events
       const filtered = events.filter(event => {
         // Filter by brand
         if (selectedBrands.length > 0 && !selectedBrands.includes(event.brand)) {
           return false;
         }
-        
+
         // Filter by duration threshold
         const duration = event.timeline_end - event.timeline_start;
         if (duration < durationThreshold) {
           return false;
         }
-        
+
         // Filter by time window
         if (timeWindow.start > 0 && event.timeline_end < timeWindow.start) {
           return false;
@@ -166,15 +166,15 @@ export default function BrandMentionDetectionPage() {
         if (timeWindow.end !== null && event.timeline_start > timeWindow.end) {
           return false;
         }
-        
+
         return true;
       });
-      
+
       if (filtered.length > 0) {
         result[videoId] = filtered;
       }
     });
-    
+
     return result;
   }, [eventsByVideo, filteredVideos, selectedBrands, durationThreshold, timeWindow]);
 
@@ -186,10 +186,10 @@ export default function BrandMentionDetectionPage() {
         setIsLoading(false);
         return;
       }
-      
+
       setIsLoading(true);
       setError(null);
-      
+
       try {
         const response = await axios.get('/api/videos', {
           params: {
@@ -198,10 +198,10 @@ export default function BrandMentionDetectionPage() {
             page: 1
           }
         });
-        
+
         if (response.data && Array.isArray(response.data.data)) {
           setVideos(response.data.data);
-          
+
           // Extract durations
           const durations: Record<string, number> = {};
           response.data.data.forEach((video: VideoData) => {
@@ -210,7 +210,7 @@ export default function BrandMentionDetectionPage() {
             }
           });
           setVideoDurations(durations);
-          
+
           // Fetch events for all videos
           await fetchEventsForVideos(response.data.data.map((v: VideoData) => v._id));
         }
@@ -221,22 +221,22 @@ export default function BrandMentionDetectionPage() {
         setIsLoading(false);
       }
     }
-    
+
     fetchVideos();
   }, [creatorIndexId]);
 
   // Fetch events for multiple videos
   async function fetchEventsForVideos(videoIds: string[]) {
     if (!creatorIndexId || videoIds.length === 0) return;
-    
+
     setIsEventsLoading(true);
-    
+
     try {
       const response = await axios.post('/api/brand-mentions/events', {
         videoIds,
         indexId: creatorIndexId
       });
-      
+
       if (response.data && response.data.results) {
         setEventsByVideo(prevEvents => ({
           ...prevEvents,
@@ -254,9 +254,9 @@ export default function BrandMentionDetectionPage() {
   // Fetch events for a single video
   async function fetchEventsForVideo(videoId: string) {
     if (!creatorIndexId) return;
-    
+
     setIsEventsLoading(true);
-    
+
     try {
       const response = await axios.get('/api/brand-mentions/events', {
         params: {
@@ -264,7 +264,7 @@ export default function BrandMentionDetectionPage() {
           indexId: creatorIndexId
         }
       });
-      
+
       if (response.data && response.data.events) {
         setEventsByVideo(prevEvents => ({
           ...prevEvents,
@@ -287,36 +287,44 @@ export default function BrandMentionDetectionPage() {
       setViewMode('per-video');
       return;
     }
-    
+
     // In per-video view, rowId is the brand
     const video = videos.find(v => v._id === selectedVideoId);
     if (!video || !video.hls?.video_url) return;
-    
+
     const events = eventsByVideo[selectedVideoId!] || [];
     const brandEvents = events.filter(e => e.brand === rowId);
     if (brandEvents.length === 0) return;
-    
+
     // Find the event that corresponds to this column
     const duration = videoDurations[selectedVideoId!] || 0;
     if (duration <= 0) return;
-    
+
     const buckets = bucketizeTimeline(duration, NUM_BUCKETS);
     const bucket = buckets[colIndex];
     if (!bucket) return;
-    
+
     const bucketStartSec = (bucket.start / 100) * duration;
     const bucketEndSec = (bucket.end / 100) * duration;
-    
+
     // Find events that overlap with this bucket
-    const overlappingEvents = brandEvents.filter(event => 
+    const overlappingEvents = brandEvents.filter(event =>
       event.timeline_end >= bucketStartSec && event.timeline_start <= bucketEndSec
     );
-    
+
     if (overlappingEvents.length === 0) return;
-    
+
     // Use the first overlapping event
     const event = overlappingEvents[0];
-    
+
+    console.log('🎬 BrandMentionDetection: Setting modal video', {
+      videoId: selectedVideoId,
+      videoUrl: video.hls?.video_url,
+      hlsData: video.hls,
+      event: event,
+      title: `${event.brand}: ${event.product_name}`
+    });
+
     setModalVideo({
       videoId: selectedVideoId!,
       videoUrl: video.hls.video_url,
@@ -330,7 +338,7 @@ export default function BrandMentionDetectionPage() {
 
   // Toggle filter selection
   function toggleCreator(creator: string) {
-    setSelectedCreators(prev => 
+    setSelectedCreators(prev =>
       prev.includes(creator)
         ? prev.filter(c => c !== creator)
         : [...prev, creator]
@@ -338,7 +346,7 @@ export default function BrandMentionDetectionPage() {
   }
 
   function toggleFormat(format: 'vertical' | 'horizontal') {
-    setSelectedFormats(prev => 
+    setSelectedFormats(prev =>
       prev.includes(format)
         ? prev.filter(f => f !== format)
         : [...prev, format]
@@ -346,7 +354,7 @@ export default function BrandMentionDetectionPage() {
   }
 
   function toggleRegion(region: string) {
-    setSelectedRegions(prev => 
+    setSelectedRegions(prev =>
       prev.includes(region)
         ? prev.filter(r => r !== region)
         : [...prev, region]
@@ -354,7 +362,7 @@ export default function BrandMentionDetectionPage() {
   }
 
   function toggleBrand(brand: string) {
-    setSelectedBrands(prev => 
+    setSelectedBrands(prev =>
       prev.includes(brand)
         ? prev.filter(b => b !== brand)
         : [...prev, brand]
@@ -381,12 +389,12 @@ export default function BrandMentionDetectionPage() {
         NUM_BUCKETS,
         selectedBrands.length > 0 ? selectedBrands : undefined
       );
-      
+
       // map TwelveLabs rows to UI-friendly rows
       const uiRows = libraryRows.map(row => {
         const video = videos.find(v => v._id === row.video_id);
-        const label = video ? 
-          (video.user_metadata?.creator || video.system_metadata?.video_title || row.video_id) : 
+        const label = video ?
+          (video.user_metadata?.creator || video.system_metadata?.video_title || row.video_id) :
           row.video_id;
         return {
           id: row.video_id,
@@ -434,7 +442,7 @@ export default function BrandMentionDetectionPage() {
 
       return rowsWithTotal;
     }
-    
+
     return [];
   }, [viewMode, selectedVideoId, filteredEvents, videos, videoDurations, selectedBrands]);
 
@@ -662,11 +670,11 @@ export default function BrandMentionDetectionPage() {
                 ) : (
                   <>
                     <h3 className="text-lg font-semibold mb-4">
-                      {viewMode === 'library' 
+                      {viewMode === 'library'
                         ? `Brand Mention Heatmap (${heatmapData.length} videos)`
                         : `Brand Mentions in ${
-                            videos.find(v => v._id === selectedVideoId)?.system_metadata?.video_title || 
-                            videos.find(v => v._id === selectedVideoId)?._id || 
+                            videos.find(v => v._id === selectedVideoId)?.system_metadata?.video_title ||
+                            videos.find(v => v._id === selectedVideoId)?._id ||
                             'Selected Video'
                           }`
                       }
@@ -680,7 +688,7 @@ export default function BrandMentionDetectionPage() {
                       />
                     </div>
                     <p className="text-xs text-gray-500 text-center">
-                      {viewMode === 'library' 
+                      {viewMode === 'library'
                         ? 'Click on a cell to view detailed brand mentions for that video'
                         : 'Click on a cell to view the video segment with the brand mention'
                       }
