@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ReactPlayer from 'react-player';
 import { VideoData } from '@/types';
 
@@ -13,6 +13,11 @@ interface VideoModalProps {
   videoScore?: number;
   originalSource?: 'TEXT' | 'VIDEO' | 'BOTH';
   contentMetadata?: VideoData;
+  startTime?: number;
+  endTime?: number;
+  bboxNorm?: { x: number; y: number; w: number; h: number };
+  showOverlay?: boolean;
+  description?: string;
 }
 
 const VideoModalSimple: React.FC<VideoModalProps> = ({
@@ -20,15 +25,50 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
   isOpen,
   onClose,
   title,
+  startTime,
+  endTime,
+  bboxNorm,
+  showOverlay,
 }) => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [currentTime, setCurrentTime] = useState<number>(0);
 
   // Initialize isPlaying when modal opens
   useEffect(() => {
     if (isOpen) {
       setIsPlaying(true);
+    } else {
+      setIsPlaying(false);
     }
   }, [isOpen]);
+
+  // Seek to startTime when metadata is available or when startTime changes
+  useEffect(() => {
+    if (!isOpen) return;
+    if (startTime === undefined || startTime === null) return;
+    const el = videoRef.current;
+    if (!el) return;
+
+    const seekToStart = () => {
+      try {
+        el.currentTime = Math.max(0, startTime);
+      } catch (err) {
+        console.error('Failed to seek to startTime', err);
+      }
+    };
+
+    if (el.readyState >= 1) {
+      seekToStart();
+    } else {
+      const onLoaded = () => {
+        seekToStart();
+        el.removeEventListener('loadedmetadata', onLoaded);
+      };
+      el.addEventListener('loadedmetadata', onLoaded);
+      return () => el.removeEventListener('loadedmetadata', onLoaded);
+    }
+  }, [isOpen, startTime, videoUrl]);
 
 
   if (!isOpen) return null;
@@ -57,27 +97,55 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
         </div>
 
         <div className="relative w-full px-6 pb-10 overflow-auto flex-grow">
-          <div className="relative w-full overflow-hidden rounded-[45.60px]" style={{ paddingTop: '56.25%' }}> {/* 16:9 Aspect Ratio */}
+          <div className="relative w-full overflow-hidden rounded-[45.60px]" style={{ paddingTop: '56.25%' }}>
+            {/* Player */}
+            <ReactPlayer
+              ref={videoRef}
+              src={videoUrl}
+              controls
+              playing={isPlaying}
+              muted
+              playsInline
+              width="100%"
+              height="100%"
+              style={{ position: 'absolute', top: 0, left: 0 }}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onTimeUpdate={(e) => {
+                const el = e.currentTarget as HTMLVideoElement;
+                setCurrentTime(el.currentTime);
+                if (endTime !== undefined && endTime !== null && el.currentTime >= endTime) {
+                  el.pause();
+                  el.currentTime = endTime;
+                  setIsPlaying(false);
+                }
+              }}
+              onError={(error) => {
+                console.error('ReactPlayer error', error);
+              }}
+            />
 
-              <ReactPlayer
-                src={videoUrl}
-                controls
-                playing={isPlaying}
-                muted
-                playsInline
-                width="100%"
-                height="100%"
-                style={{ position: 'absolute', top: 0, left: 0 }}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                onError={(error) => {
-                  // Surface player errors to the console for easier debugging
-                  // Common causes: CORS on media, invalid URL, missing .m3u8 without forceHLS
-                  // or browser autoplay policies when not muted
-                  console.error('ReactPlayer error', error);
+            {/* Bounding box overlay */}
+            {showOverlay && bboxNorm && (
+              <div
+                className="absolute border-2 border-red-500 rounded"
+                style={{
+                  left: `${bboxNorm.x * 100}%`,
+                  top: `${bboxNorm.y * 100}%`,
+                  width: `${bboxNorm.w * 100}%`,
+                  height: `${bboxNorm.h * 100}%`,
                 }}
               />
+            )}
           </div>
+
+          {/* Current segment info */}
+          {(startTime !== undefined || endTime !== undefined) && (
+            <div className="mt-3 text-xs text-gray-500">
+              Segment: {Math.max(0, startTime ?? 0).toFixed(2)}s – {endTime?.toFixed(2) ?? 'End'}
+              {Number.isFinite(currentTime) && ` • Now: ${currentTime.toFixed(2)}s`}
+            </div>
+          )}
         </div>
       </div>
     </div>
