@@ -22,6 +22,7 @@ export default function BrandMentionDetectionPage() {
   // Video and event data
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [eventsByVideo, setEventsByVideo] = useState<Record<string, ProductEvent[]>>({});
+  const [analysisByVideo, setAnalysisByVideo] = useState<Record<string, any>>({});
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [videoDurations, setVideoDurations] = useState<Record<string, number>>({});
 
@@ -238,9 +239,22 @@ export default function BrandMentionDetectionPage() {
       });
 
       if (response.data && response.data.results) {
+        const newEvents: Record<string, ProductEvent[]> = {};
+        const newAnalysis: Record<string, any> = {};
+
+        Object.entries(response.data.results).forEach(([videoId, result]: [string, any]) => {
+          newEvents[videoId] = result.events || [];
+          newAnalysis[videoId] = result.analysis || {};
+        });
+
         setEventsByVideo(prevEvents => ({
           ...prevEvents,
-          ...response.data.results
+          ...newEvents
+        }));
+
+        setAnalysisByVideo(prevAnalysis => ({
+          ...prevAnalysis,
+          ...newAnalysis
         }));
       }
     } catch (error) {
@@ -270,6 +284,13 @@ export default function BrandMentionDetectionPage() {
           ...prevEvents,
           [videoId]: response.data.events
         }));
+
+        if (response.data.analysis) {
+          setAnalysisByVideo(prevAnalysis => ({
+            ...prevAnalysis,
+            [videoId]: response.data.analysis
+          }));
+        }
       }
     } catch (error) {
       console.error(`Error fetching events for video ${videoId}:`, error);
@@ -755,6 +776,35 @@ export default function BrandMentionDetectionPage() {
                           <p className="text-xs text-gray-500">
                             Duration: {Math.round(video.system_metadata?.duration || 0)}s
                           </p>
+
+                          {/* Analysis data */}
+                          {analysisByVideo[video._id] && (
+                            <div className="mt-2 space-y-1">
+                              {analysisByVideo[video._id].tones && analysisByVideo[video._id].tones.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {analysisByVideo[video._id].tones.map((tone: string, index: number) => (
+                                    <span key={index} className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
+                                      {tone}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {analysisByVideo[video._id].styles && analysisByVideo[video._id].styles.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {analysisByVideo[video._id].styles.map((style: string, index: number) => (
+                                    <span key={index} className="px-1.5 py-0.5 text-xs bg-purple-100 text-purple-800 rounded">
+                                      {style}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {analysisByVideo[video._id].creator && (
+                                <p className="text-xs text-green-600 font-medium">
+                                  Creator: {analysisByVideo[video._id].creator}
+                                </p>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}

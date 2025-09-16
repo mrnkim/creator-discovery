@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ProductEvent, ProductEventArraySchema } from '@/types/brandMentions';
+import { ProductEvent, ProductEventArraySchema, VideoAnalysisMetadata } from '@/types/brandMentions';
 
 const API_KEY = process.env.TWELVELABS_API_KEY;
 const TWELVELABS_API_BASE_URL = process.env.TWELVELABS_API_BASE_URL;
@@ -32,10 +32,10 @@ export async function GET(request: NextRequest) {
     // First try to get events from video metadata
     if (!force) {
       try {
-        const events = await getEventsFromMetadata(videoId, indexId);
+        const { events, analysis } = await getEventsFromMetadata(videoId, indexId);
         if (events && events.length > 0) {
           console.log(`✅ Retrieved ${events.length} cached brand mention events for video ${videoId}`);
-          return NextResponse.json({ events });
+          return NextResponse.json({ events, analysis });
         }
       } catch (error) {
         console.warn(`⚠️ Failed to retrieve cached events: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -63,7 +63,10 @@ export async function GET(request: NextRequest) {
     }
 
     const analyzeResult = await analyzeResponse.json();
-    return NextResponse.json({ events: analyzeResult.events });
+    return NextResponse.json({
+      events: analyzeResult.events,
+      analysis: analyzeResult.analysis || {}
+    });
   } catch (error) {
     console.error('❌ Error retrieving brand mention events:', error);
     return NextResponse.json(
@@ -98,7 +101,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Process each video
-    const results: Record<string, ProductEvent[]> = {};
+    const results: Record<string, { events: ProductEvent[], analysis: VideoAnalysisMetadata }> = {};
     const errors: Record<string, string> = {};
 
     await Promise.all(videoIds.map(async (videoId) => {
@@ -106,12 +109,12 @@ export async function POST(request: NextRequest) {
         // Try to get events from metadata first
         if (!force) {
           try {
-            const events = await getEventsFromMetadata(videoId, indexId);
+            const { events, analysis } = await getEventsFromMetadata(videoId, indexId);
             if (events && events.length > 0) {
-              results[videoId] = events;
+              results[videoId] = { events, analysis };
               return;
             }
-          } catch (error) {
+          } catch {
             // Continue to analyze if cached events retrieval fails
           }
         }
@@ -135,13 +138,16 @@ export async function POST(request: NextRequest) {
         }
 
         const analyzeResult = await analyzeResponse.json();
-        results[videoId] = analyzeResult.events;
+        results[videoId] = {
+          events: analyzeResult.events,
+          analysis: analyzeResult.analysis || {}
+        };
       } catch (error) {
         errors[videoId] = error instanceof Error ? error.message : 'Unknown error';
       }
     }));
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       results,
       errors: Object.keys(errors).length > 0 ? errors : undefined
     });
@@ -155,12 +161,12 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Helper function to retrieve brand mention events from video metadata
+ * Helper function to retrieve brand mention events and analysis from video metadata
  */
-async function getEventsFromMetadata(videoId: string, indexId: string): Promise<ProductEvent[]> {
+async function getEventsFromMetadata(videoId: string, indexId: string): Promise<{ events: ProductEvent[], analysis: VideoAnalysisMetadata }> {
   // Fetch video details using existing API route
   const videoDetailUrl = `${TWELVELABS_API_BASE_URL}/indexes/${indexId}/videos/${videoId}`;
-  
+
   const response = await fetch(videoDetailUrl, {
     headers: {
       'Accept': 'application/json',
@@ -173,16 +179,39 @@ async function getEventsFromMetadata(videoId: string, indexId: string): Promise<
   }
 
   const videoDetail = await response.json();
-  
+
   // Check if brand_product_events exists in user_metadata
   if (videoDetail.user_metadata?.brand_product_events) {
     try {
       const events = JSON.parse(videoDetail.user_metadata.brand_product_events);
-      
+
       // Validate events with schema
       const validationResult = ProductEventArraySchema.safeParse(events);
       if (validationResult.success) {
-        return validationResult.data;
+        // Extract analysis data from metadata
+        const analysis: VideoAnalysisMetadata = {};
+
+        if (videoDetail.user_metadata.video_tones) {
+          try {
+            analysis.tones = JSON.parse(videoDetail.user_metadata.video_tones);
+          } catch {
+            console.warn('⚠️ Failed to parse video_tones from metadata');
+          }
+        }
+
+        if (videoDetail.user_metadata.video_styles) {
+          try {
+            analysis.styles = JSON.parse(videoDetail.user_metadata.video_styles);
+          } catch {
+            console.warn('⚠️ Failed to parse video_styles from metadata');
+          }
+        }
+
+        if (videoDetail.user_metadata.video_creator) {
+          analysis.creator = videoDetail.user_metadata.video_creator;
+        }
+
+        return { events: validationResult.data, analysis };
       } else {
         console.warn('⚠️ Invalid events format in metadata, will reanalyze');
         throw new Error('Invalid events format in metadata');
@@ -192,7 +221,7 @@ async function getEventsFromMetadata(videoId: string, indexId: string): Promise<
       throw new Error('Failed to parse events from metadata');
     }
   }
-  
+
   // No events found in metadata
-  return [];
+  return { events: [], analysis: {} };
 }

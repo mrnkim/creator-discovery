@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ProductEvent, ProductEventArraySchema } from '@/types/brandMentions';
+import { ProductEvent, ProductEventArraySchema, VideoAnalysisMetadata, VideoAnalysisMetadataSchema } from '@/types/brandMentions';
 
 const API_KEY = process.env.TWELVELABS_API_KEY;
 const TWELVELABS_API_BASE_URL = process.env.TWELVELABS_API_BASE_URL;
@@ -37,30 +37,43 @@ export async function POST(request: NextRequest) {
 
     // Create prompt for Analyze API
     const prompt = `
-    Analyze this video and identify all brand and product mentions that are visually shown with clear branding.
+    Analyze this video and provide comprehensive information about brand mentions, video tone, style, and creator information.
 
-    IMPORTANT: Respond with ONLY a valid JSON array. No explanations, no markdown, no additional text.
+    IMPORTANT: Respond with ONLY a valid JSON object. No explanations, no markdown, no additional text.
 
-    If no products are found, respond with: []
+    Use this exact format:
+    {
+      "products": [
+        {
+          "brand": "BrandName",
+          "product_name": "Product Name",
+          "timeline": [start_seconds, end_seconds],
+          "location": [x_percent, y_percent, width_percent, height_percent],
+          "description": "brief description of what is shown"
+        }
+      ],
+      "tones": ["tone1", "tone2"],
+      "styles": ["style1", "style2"],
+      "creator": "Creator Name or null"
+    }
 
-    If products are found, use this exact format:
-    [
-      {
-        "brand": "BrandName",
-        "product_name": "Product Name",
-        "timeline": [start_seconds, end_seconds],
-        "location": [x_percent, y_percent, width_percent, height_percent],
-        "price": "price if visible",
-        "description": "brief description of what is shown"
-      }
-    ]
-
-    Rules:
+    Rules for products:
     - Only include products with visible branding/logos
     - Use numbers for timeline and location (no strings)
     - Location values should be 0-100 (percentages)
-    - If price is not visible, use null
+    - If no products found, use empty array: []
     - Keep descriptions brief and factual
+
+    Rules for tones (select 1-3 most relevant):
+    - aspirational, playful, gritty, cozy, ironic, energetic, professional, casual, dramatic, humorous, serious, romantic, adventurous, nostalgic, futuristic, minimalist, bold, subtle, confident, mysterious
+
+    Rules for styles (select 1-3 most relevant):
+    - retro, modern, classic, vintage, contemporary, minimalist, maximalist, industrial, bohemian, luxury, street, corporate, artistic, cinematic, documentary, commercial, lifestyle, fashion, tech, food, travel, fitness, beauty, gaming
+
+    Rules for creator:
+    - If this appears to be a creator/influencer video, identify the creator's name
+    - If not a creator video, use null
+    - Look for watermarks, intros, or other creator identification
     `;
 
     // Call Analyze API
@@ -95,11 +108,12 @@ export async function POST(request: NextRequest) {
     console.log(`📝 Raw API response for video ${videoId}:`, responseText.substring(0, 500) + (responseText.length > 500 ? '...' : ''));
 
     let parsedEvents: unknown[] = [];
+    let videoAnalysis: VideoAnalysisMetadata = {};
 
-    // Check if response is empty or contains no products
-    if (!responseText || responseText.trim() === '' || responseText.trim() === '[]') {
-      console.log(`ℹ️ No brand mentions found in video ${videoId}`);
-      return NextResponse.json({ events: [] });
+    // Check if response is empty
+    if (!responseText || responseText.trim() === '') {
+      console.log(`ℹ️ Empty response for video ${videoId}`);
+      return NextResponse.json({ events: [], analysis: videoAnalysis });
     }
 
     try {
@@ -110,44 +124,78 @@ export async function POST(request: NextRequest) {
       // Check if the response has a 'data' field containing JSON string
       if (responseObj && typeof responseObj.data === 'string') {
         console.log(`🔍 Found 'data' field, parsing nested JSON for video ${videoId}`);
-        parsedEvents = JSON.parse(responseObj.data);
+        const nestedData = JSON.parse(responseObj.data);
+
+        // Handle new structure with products, tones, styles, creator
+        if (nestedData && typeof nestedData === 'object') {
+          parsedEvents = nestedData.products || [];
+          videoAnalysis = {
+            tones: nestedData.tones || [],
+            styles: nestedData.styles || [],
+            creator: nestedData.creator || undefined
+          };
+        } else {
+          // Fallback to array format
+          parsedEvents = Array.isArray(nestedData) ? nestedData : [];
+        }
         console.log(`✅ Successfully parsed nested JSON data for video ${videoId}`);
-      } else if (Array.isArray(responseObj)) {
-        // Direct array response
-        parsedEvents = responseObj;
-        console.log(`✅ Using direct array response for video ${videoId}`);
+      } else if (responseObj && typeof responseObj === 'object') {
+        // Handle new structure directly
+        if (responseObj.products !== undefined) {
+          parsedEvents = responseObj.products || [];
+          videoAnalysis = {
+            tones: responseObj.tones || [],
+            styles: responseObj.styles || [],
+            creator: responseObj.creator || undefined
+          };
+        } else if (Array.isArray(responseObj)) {
+          // Direct array response (legacy format)
+          parsedEvents = responseObj;
+        } else {
+          console.warn(`⚠️ Unexpected response structure for video ${videoId}:`, responseObj);
+          parsedEvents = [];
+        }
+        console.log(`✅ Using direct object response for video ${videoId}`);
       } else {
         console.warn(`⚠️ Unexpected response structure for video ${videoId}:`, responseObj);
         parsedEvents = [];
       }
     } catch (parseError) {
       console.warn(`⚠️ Failed to parse response as JSON for video ${videoId}:`, parseError);
-      console.warn('🔍 Attempting to extract JSON array...');
+      console.warn('🔍 Attempting to extract JSON...');
 
       try {
-        // Second attempt: extract JSON array between first '[' and last ']'
-        const match = responseText.match(/\[[\s\S]*\]/);
-        if (match) {
-          parsedEvents = JSON.parse(match[0]);
+        // Second attempt: extract JSON object or array
+        const objectMatch = responseText.match(/\{[\s\S]*\}/);
+        const arrayMatch = responseText.match(/\[[\s\S]*\]/);
+
+        if (objectMatch) {
+          const parsed = JSON.parse(objectMatch[0]);
+          if (parsed.products !== undefined) {
+            parsedEvents = parsed.products || [];
+            videoAnalysis = {
+              tones: parsed.tones || [],
+              styles: parsed.styles || [],
+              creator: parsed.creator || undefined
+            };
+          } else {
+            // Treat as legacy array format
+            parsedEvents = [parsed];
+          }
+          console.log(`✅ Successfully extracted JSON object for video ${videoId}`);
+        } else if (arrayMatch) {
+          parsedEvents = JSON.parse(arrayMatch[0]);
           console.log(`✅ Successfully extracted JSON array for video ${videoId}`);
         } else {
-          // Third attempt: look for individual JSON objects and wrap in array
-          const objectMatches = responseText.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
-          if (objectMatches && objectMatches.length > 0) {
-            const combinedJson = '[' + objectMatches.join(',') + ']';
-            parsedEvents = JSON.parse(combinedJson);
-            console.log(`✅ Successfully combined JSON objects for video ${videoId}`);
-          } else {
-            throw new Error('No valid JSON found in response');
-          }
+          throw new Error('No valid JSON found in response');
         }
       } catch (extractError) {
         console.error(`❌ Failed to extract valid JSON from response for video ${videoId}:`, extractError);
         console.error(`📄 Full response text:`, responseText);
 
-        // Return empty array instead of error to avoid blocking the process
+        // Return empty results instead of error to avoid blocking the process
         console.log(`⚠️ Returning empty results for video ${videoId} due to parsing issues`);
-        return NextResponse.json({ events: [] });
+        return NextResponse.json({ events: [], analysis: videoAnalysis });
       }
     }
 
@@ -170,7 +218,6 @@ export async function POST(request: NextRequest) {
         video_id: videoId,
         brand: typeof eventItem.brand === 'string' ? eventItem.brand : 'Unknown Brand',
         product_name: typeof eventItem.product_name === 'string' ? eventItem.product_name : 'Unknown Product',
-        price: typeof eventItem.price === 'string' ? eventItem.price : undefined,
         timeline_start: typeof timeline[0] === 'number' ? timeline[0] : 0,
         timeline_end: typeof timeline[1] === 'number' ? timeline[1] : 0,
         bbox_norm: {
@@ -198,11 +245,24 @@ export async function POST(request: NextRequest) {
     const deduplicatedEvents = deduplicateEvents(events);
     console.log(`✅ Found ${deduplicatedEvents.length} brand mentions after deduplication`);
 
+    // Validate video analysis metadata
+    const analysisValidationResult = VideoAnalysisMetadataSchema.safeParse(videoAnalysis);
+    if (!analysisValidationResult.success) {
+      console.warn(`⚠️ Video analysis validation failed for video ${videoId}:`, analysisValidationResult.error.format());
+      // Use empty analysis if validation fails
+      videoAnalysis = {};
+    } else {
+      console.log(`✅ Video analysis validation passed for video ${videoId}`);
+    }
+
     // Save to user_metadata
     const metadata = {
       brand_product_events: JSON.stringify(deduplicatedEvents),
       brand_product_analyzed_at: new Date().toISOString(),
-      brand_product_source: 'analyze'
+      brand_product_source: 'analyze',
+      video_tones: videoAnalysis.tones ? JSON.stringify(videoAnalysis.tones) : undefined,
+      video_styles: videoAnalysis.styles ? JSON.stringify(videoAnalysis.styles) : undefined,
+      video_creator: videoAnalysis.creator || undefined
     };
 
     // Update video metadata
@@ -228,8 +288,11 @@ export async function POST(request: NextRequest) {
       console.log(`✅ Updated metadata for video ${videoId}`);
     }
 
-    // Return the events
-    return NextResponse.json({ events: deduplicatedEvents });
+    // Return the events and analysis
+    return NextResponse.json({
+      events: deduplicatedEvents,
+      analysis: videoAnalysis
+    });
   } catch (error) {
     console.error('❌ Error in brand mention analysis:', error);
     return NextResponse.json(

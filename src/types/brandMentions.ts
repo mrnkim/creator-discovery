@@ -101,3 +101,21 @@ export type LibraryHeatmapRow = {
   video_id: string;
   buckets: HeatmapBucket[];
 };
+
+/**
+ * Video analysis metadata for tones, styles, and creator information
+ */
+export interface VideoAnalysisMetadata {
+  tones?: string[];
+  styles?: string[];
+  creator?: string;
+}
+
+/**
+ * Zod schema for validating VideoAnalysisMetadata
+ */
+export const VideoAnalysisMetadataSchema = z.object({
+  tones: z.array(z.string()).optional(),
+  styles: z.array(z.string()).optional(),
+  creator: z.string().optional()
+});
