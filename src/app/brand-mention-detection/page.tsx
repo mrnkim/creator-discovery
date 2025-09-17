@@ -4,8 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import clsx from 'clsx';
 import { VideoData } from '@/types';
-import { ProductEvent, EventFilters } from '@/types/brandMentions';
-import { aggregatePerVideo, aggregateLibrary, bucketizeTimeline } from '@/utils/heatmap';
+import { ProductEvent } from '@/types/brandMentions';
+import { aggregatePerVideo, aggregateLibrary } from '@/utils/heatmap';
 import Heatmap from '@/components/Heatmap';
 import VideoModalSimple from '@/components/VideoModalSimple';
 import LoadingSpinner from '@/components/LoadingSpinner';
@@ -13,7 +13,16 @@ import ErrorFallback from '@/components/ErrorFallback';
 import { ErrorBoundary } from 'react-error-boundary';
 
 // Number of time buckets for heatmap visualization
-const NUM_BUCKETS = 50;
+const NUM_BUCKETS = 50; // Increased for better granularity
+
+// Minimal shape we read from analysis payload
+type VideoAnalysis = {
+  tones?: string[];
+  styles?: string[];
+  creator?: string;
+  // allow forward-compat extra data
+  [key: string]: unknown;
+};
 
 export default function BrandMentionDetectionPage() {
   // Environment variables
@@ -22,7 +31,7 @@ export default function BrandMentionDetectionPage() {
   // Video and event data
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [eventsByVideo, setEventsByVideo] = useState<Record<string, ProductEvent[]>>({});
-  const [analysisByVideo, setAnalysisByVideo] = useState<Record<string, any>>({});
+  const [analysisByVideo, setAnalysisByVideo] = useState<Record<string, VideoAnalysis>>({});
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [videoDurations, setVideoDurations] = useState<Record<string, number>>({});
 
@@ -225,6 +234,7 @@ export default function BrandMentionDetectionPage() {
     }
 
     fetchVideos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creatorIndexId]);
 
   // Fetch events for multiple videos
@@ -241,11 +251,16 @@ export default function BrandMentionDetectionPage() {
 
       if (response.data && response.data.results) {
         const newEvents: Record<string, ProductEvent[]> = {};
-        const newAnalysis: Record<string, any> = {};
+        const newAnalysis: Record<string, VideoAnalysis> = {};
 
-        Object.entries(response.data.results).forEach(([videoId, result]: [string, any]) => {
-          newEvents[videoId] = result.events || [];
-          newAnalysis[videoId] = result.analysis || {};
+        const results = response.data.results as Record<
+          string,
+          { events?: ProductEvent[]; analysis?: VideoAnalysis }
+        >;
+
+        Object.entries(results).forEach(([videoId, result]) => {
+          newEvents[videoId] = result.events ?? [];
+          newAnalysis[videoId] = result.analysis ?? {};
         });
 
         setEventsByVideo(prevEvents => ({
@@ -290,7 +305,7 @@ export default function BrandMentionDetectionPage() {
         if (response.data.analysis) {
           setAnalysisByVideo(prevAnalysis => ({
             ...prevAnalysis,
-            [videoId]: response.data.analysis
+            [videoId]: response.data.analysis as VideoAnalysis
           }));
         }
       }
@@ -340,6 +355,8 @@ export default function BrandMentionDetectionPage() {
     }
   }
 
+  // (Removed) createEventBasedBuckets: not used
+
   // Handle cell click in heatmap
   function handleHeatmapCellClick(rowId: string, colIndex: number) {
     if (viewMode === 'library') {
@@ -354,58 +371,117 @@ export default function BrandMentionDetectionPage() {
     if (!video || !video.hls?.video_url) return;
 
     const events = eventsByVideo[selectedVideoId!] || [];
-    const brandEvents = events.filter(e => e.brand === rowId);
+    const normalizedRowId = (rowId || '').toString().trim().toLowerCase();
+    let brandEvents = events.filter(e => (e.brand || '').toString().trim().toLowerCase() === normalizedRowId);
+    // Fallback: try loose matching if strict match found nothing (handles minor label mismatches)
+    if (brandEvents.length === 0) {
+      brandEvents = events.filter(e => {
+        const brand = (e.brand || '').toString().toLowerCase();
+        const product = (e.product_name || '').toString().toLowerCase();
+        return brand.includes(normalizedRowId) || normalizedRowId.includes(brand) || product.includes(normalizedRowId);
+      });
+    }
     if (brandEvents.length === 0) return;
 
     // Find the event that corresponds to this column
     const duration = videoDurations[selectedVideoId!] || 0;
     if (duration <= 0) return;
 
-    const buckets = bucketizeTimeline(duration, NUM_BUCKETS);
-    const bucket = buckets[colIndex];
-    if (!bucket) return;
+    console.log('🔍 DEBUG: Emirates events analysis', {
+      rowId,
+      brandEvents: brandEvents.map((e, idx) => ({
+        index: idx,
+        brand: e.brand,
+        start: e.timeline_start,
+        end: e.timeline_end,
+        duration: e.timeline_end - e.timeline_start,
+        expectedBucket: Math.floor(e.timeline_start / (duration / NUM_BUCKETS)),
+        expectedBucketEnd: Math.floor(e.timeline_end / (duration / NUM_BUCKETS))
+      })),
+      videoDuration: duration,
+      bucketSize: duration / NUM_BUCKETS
+    });
 
-    const bucketStartSec = (bucket.start / 100) * duration;
-    const bucketEndSec = (bucket.end / 100) * duration;
+    // Find the event that was actually assigned to this colIndex bucket in the heatmap
+    // Use the same logic as heatmap generation to ensure consistency
 
-    // Find events that overlap with this bucket
-    const overlappingEvents = brandEvents.filter(event =>
-      event.timeline_end >= bucketStartSec && event.timeline_start <= bucketEndSec
-    );
+    // Recreate the bucket structure used in heatmap generation
+    const bucketDurationSec = duration / NUM_BUCKETS;
+    const buckets = Array.from({ length: NUM_BUCKETS }, (_, i) => ({
+      startSec: i * bucketDurationSec,
+      endSec: (i + 1) * bucketDurationSec,
+      startPct: (i * bucketDurationSec / duration) * 100,
+      endPct: ((i + 1) * bucketDurationSec / duration) * 100
+    }));
 
-    if (overlappingEvents.length === 0) {
-      console.log('🚫 No overlapping events found for bucket', {
-        rowId,
-        colIndex,
-        bucketStartSec,
-        bucketEndSec,
-        brandEvents: brandEvents.map(e => ({
-          brand: e.brand,
-          start: e.timeline_start,
-          end: e.timeline_end
-        }))
+    // Use the EXACT same logic as heatmap generation to find which event was assigned to this bucket
+    // First, create the event-to-bucket mapping exactly like in heatmap.ts
+    const eventToBucketMap = new Map<number, number>(); // eventIndex -> bucketIndex
+
+    brandEvents.forEach((event, eventIndex) => {
+      let bestBucketIndex = -1;
+      let bestOverlap = 0;
+
+      buckets.forEach((bucket, bucketIndex) => {
+        const overlap = Math.max(0, Math.min(event.timeline_end, bucket.endSec) - Math.max(event.timeline_start, bucket.startSec));
+
+        if (overlap > bestOverlap) {
+          bestOverlap = overlap;
+          bestBucketIndex = bucketIndex;
+        }
       });
+
+      if (bestBucketIndex >= 0) {
+        eventToBucketMap.set(eventIndex, bestBucketIndex);
+      }
+    });
+
+    // Now find which event was assigned to the clicked bucket
+    let assignedEvent: ProductEvent | null = null;
+    brandEvents.forEach((event, eventIndex) => {
+      if (eventToBucketMap.get(eventIndex) === colIndex) {
+        assignedEvent = event;
+      }
+    });
+
+    // Log the mapping details
+    console.log('🔧 DEBUG: Direct bucket assignment');
+    console.log(`  Clicked colIndex: ${colIndex}`);
+    console.log(`  Clicked bucket: ${buckets[colIndex].startSec.toFixed(2)}-${buckets[colIndex].endSec.toFixed(2)}s`);
+    console.log('  Event to Bucket Mapping:');
+    Array.from(eventToBucketMap.entries()).forEach(([
+      eventIndex,
+      bucketIndex
+    ]: [number, number]) => {
+      console.log(`    Event ${eventIndex} (${brandEvents[eventIndex].timeline_start}-${brandEvents[eventIndex].timeline_end}s) → Bucket ${bucketIndex}`);
+    });
+    console.log(`  Assigned event for bucket ${colIndex}:`, assignedEvent ? `${(assignedEvent as ProductEvent).timeline_start}-${(assignedEvent as ProductEvent).timeline_end}s` : 'None');
+
+    // Also log which buckets should have values
+    const bucketsWithEvents = Array.from(new Set(eventToBucketMap.values())).sort((a, b) => a - b);
+    console.log(`  Buckets that should be colored: [${bucketsWithEvents.join(', ')}]`);
+
+    if (!assignedEvent) {
+      console.log('🚫 No event assigned to this bucket');
       return;
     }
 
-    // Find the event that best matches this bucket (closest to bucket center)
-    const bucketCenter = (bucketStartSec + bucketEndSec) / 2;
-    const event = overlappingEvents.reduce((best, current) => {
-      const currentCenter = (current.timeline_start + current.timeline_end) / 2;
-      const bestCenter = (best.timeline_start + best.timeline_end) / 2;
+    // Use the clicked bucket boundaries
+    const correctedBucketStartSec = buckets[colIndex].startSec;
+    const correctedBucketEndSec = buckets[colIndex].endSec;
+    const correctedBucketCenter = (correctedBucketStartSec + correctedBucketEndSec) / 2;
 
-      const currentDistance = Math.abs(currentCenter - bucketCenter);
-      const bestDistance = Math.abs(bestCenter - bucketCenter);
+    // Use the assigned event directly (no need for complex selection logic)
+    const event: ProductEvent = assignedEvent as ProductEvent;
 
-      return currentDistance < bestDistance ? current : best;
-    });
+    console.log(`🏆 Final selected event: ${event.timeline_start}-${event.timeline_end}`);
 
     // Create a more precise segment based on the bucket
-    const preciseStart = Math.max(event.timeline_start, bucketStartSec);
-    const preciseEnd = Math.min(event.timeline_end, bucketEndSec);
+    // const preciseStart = Math.max(event.timeline_start, correctedBucketStartSec);
+    // const preciseEnd = Math.min(event.timeline_end, correctedBucketEndSec);
 
     // Determine the best segment to play
-    const bucketDuration = bucketEndSec - bucketStartSec;
+    const bucketDuration = correctedBucketEndSec - correctedBucketStartSec;
     const eventDuration = event.timeline_end - event.timeline_start;
 
     let finalStart = event.timeline_start;
@@ -414,13 +490,12 @@ export default function BrandMentionDetectionPage() {
     // If the event spans the entire video (or most of it), use a reasonable segment
     if (eventDuration > duration * 0.8) {
       // For events that span most of the video, use a 10-second segment around the bucket center
-      const bucketCenter = (bucketStartSec + bucketEndSec) / 2;
-      finalStart = Math.max(0, bucketCenter - 5);
-      finalEnd = Math.min(duration, bucketCenter + 5);
+      finalStart = Math.max(0, correctedBucketCenter - 5);
+      finalEnd = Math.min(duration, correctedBucketCenter + 5);
     } else if (bucketDuration < eventDuration * 0.3) {
       // For very small buckets compared to event, use bucket boundaries
-      finalStart = bucketStartSec;
-      finalEnd = bucketEndSec;
+      finalStart = correctedBucketStartSec;
+      finalEnd = correctedBucketEndSec;
     }
     // Otherwise, use the full event duration
 
@@ -432,14 +507,14 @@ export default function BrandMentionDetectionPage() {
       title: `${event.brand}: ${event.product_name}`,
       bucketInfo: {
         colIndex,
-        bucketStartSec,
-        bucketEndSec,
-        bucketCenter,
+        bucketStartSec: correctedBucketStartSec,
+        bucketEndSec: correctedBucketEndSec,
+        bucketCenter: correctedBucketCenter,
         duration
       },
       timingInfo: {
         originalEvent: { start: event.timeline_start, end: event.timeline_end },
-        bucket: { start: bucketStartSec, end: bucketEndSec },
+        bucket: { start: correctedBucketStartSec, end: correctedBucketEndSec },
         final: { start: finalStart, end: finalEnd },
         bucketDuration,
         eventDuration,
@@ -448,7 +523,7 @@ export default function BrandMentionDetectionPage() {
         bucketMuchSmallerThanEvent: bucketDuration < eventDuration * 0.3
       },
       allBrandEvents: brandEvents,
-      overlappingEvents: overlappingEvents
+      assignedEvent: event
     });
 
     setModalVideo({
@@ -547,7 +622,29 @@ export default function BrandMentionDetectionPage() {
       // Per-video view: brands as rows, time buckets as columns
       const events = filteredEvents[selectedVideoId] || [];
       const videoDuration = videoDurations[selectedVideoId] || 0;
+
+      console.log('🔍 Generating heatmap data for video:', {
+        videoId: selectedVideoId,
+        videoDuration,
+        events: events.map(e => ({
+          brand: e.brand,
+          start: e.timeline_start,
+          end: e.timeline_end
+        })),
+        numBuckets: NUM_BUCKETS
+      });
+
       const perVideoRows = aggregatePerVideo(events, NUM_BUCKETS, 'brand', videoDuration);
+
+      // Log the actual heatmap data for Emirates
+      const emiratesHeatmapRow = perVideoRows.find(row => row.key === 'Emirates');
+      if (emiratesHeatmapRow) {
+        const nonZeroBuckets = emiratesHeatmapRow.buckets
+          .map((bucket, index) => ({ index, ...bucket }))
+          .filter(bucket => bucket.value > 0);
+        console.log('📊 Emirates heatmap buckets with values:', nonZeroBuckets);
+      }
+
       const rowsWithTotal = perVideoRows.map(row => ({
         id: row.key,
         label: row.label,
@@ -922,18 +1019,18 @@ export default function BrandMentionDetectionPage() {
                           {/* Analysis data */}
                           {analysisByVideo[video._id] && (
                             <div className="mt-2 space-y-1">
-                              {analysisByVideo[video._id].tones && analysisByVideo[video._id].tones.length > 0 && (
+                              {analysisByVideo[video._id].tones && analysisByVideo[video._id].tones!.length > 0 && (
                                 <div className="flex flex-wrap gap-1">
-                                  {analysisByVideo[video._id].tones.map((tone: string, index: number) => (
+                                  {analysisByVideo[video._id].tones!.map((tone: string, index: number) => (
                                     <span key={index} className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
                                       {tone}
                                     </span>
                                   ))}
                                 </div>
                               )}
-                              {analysisByVideo[video._id].styles && analysisByVideo[video._id].styles.length > 0 && (
+                              {analysisByVideo[video._id].styles && analysisByVideo[video._id].styles!.length > 0 && (
                                 <div className="flex flex-wrap gap-1">
-                                  {analysisByVideo[video._id].styles.map((style: string, index: number) => (
+                                  {analysisByVideo[video._id].styles!.map((style: string, index: number) => (
                                     <span key={index} className="px-1.5 py-0.5 text-xs bg-purple-100 text-purple-800 rounded">
                                       {style}
                                     </span>

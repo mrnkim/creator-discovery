@@ -88,19 +88,68 @@ export function aggregatePerVideo(
   const rows: PerVideoHeatmapRow[] = [];
 
   Object.entries(groupedEvents).forEach(([key, groupEvents]) => {
-    const heatmapBuckets: HeatmapBucket[] = buckets.map(bucket => {
-      // Calculate total overlap duration for all events in this group with this bucket
-      let value = 0;
+    console.log(`🔍 Processing brand group: ${key}`, {
+      eventCount: groupEvents.length,
+      events: groupEvents.map(e => ({
+        start: e.timeline_start,
+        end: e.timeline_end,
+        duration: e.timeline_end - e.timeline_start
+      }))
+    });
 
-      groupEvents.forEach(event => {
+    // First, assign each event to its best matching bucket to avoid duplicates
+    const eventToBucketMap = new Map<number, number>(); // eventIndex -> bucketIndex
+
+    groupEvents.forEach((event, eventIndex) => {
+      let bestBucketIndex = -1;
+      let bestOverlap = 0;
+
+      buckets.forEach((bucket, bucketIndex) => {
         const overlap = calculateOverlap(
           event.timeline_start,
           event.timeline_end,
           bucket.startSec,
           bucket.endSec
         );
-        value += overlap;
+
+        if (overlap > bestOverlap) {
+          bestOverlap = overlap;
+          bestBucketIndex = bucketIndex;
+        }
       });
+
+      if (bestBucketIndex >= 0) {
+        eventToBucketMap.set(eventIndex, bestBucketIndex);
+
+        if (key === 'Emirates') {
+          console.log(`📊 Emirates event ${eventIndex} (${event.timeline_start}-${event.timeline_end}) assigned to bucket ${bestBucketIndex}:`, {
+            bucket: { start: buckets[bestBucketIndex].startSec, end: buckets[bestBucketIndex].endSec },
+            overlap: bestOverlap
+          });
+        }
+      }
+    });
+
+    // Create buckets with values only from assigned events
+    const heatmapBuckets: HeatmapBucket[] = buckets.map((bucket, bucketIndex) => {
+      let value = 0;
+
+      // Add value only from events assigned to this specific bucket
+      let eventCount = 0;
+      groupEvents.forEach((event, eventIndex) => {
+        if (eventToBucketMap.get(eventIndex) === bucketIndex) {
+          eventCount++;
+          // Use a consistent value to show event presence (normalized by event duration)
+          value += event.timeline_end - event.timeline_start;
+        }
+      });
+
+      // If multiple events are assigned to the same bucket, use the count as intensity
+      if (eventCount > 1) {
+        console.log(`⚠️ Multiple events (${eventCount}) assigned to bucket ${bucketIndex} for ${key}`);
+        // This shouldn't happen with better bucket granularity, but handle it gracefully
+        value = eventCount; // Use event count as intensity
+      }
 
       return {
         start: bucket.startPct,

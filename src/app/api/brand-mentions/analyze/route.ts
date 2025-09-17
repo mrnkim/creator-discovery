@@ -59,47 +59,72 @@ export async function POST(request: NextRequest) {
 
     // Create prompt for Analyze API
     const prompt = `
-You are analyzing a video about ${videoDuration > 0 ? Math.round(videoDuration) : 'several minutes'} seconds long.
-Scan the ENTIRE video from start to finish (0%–100%). Do not stop early.
+    You are analyzing a video about ${videoDuration > 0 ? Math.round(videoDuration) : 'several minutes'} seconds long.
+    Scan the ENTIRE video from start to finish (0%–100%). Do not stop early.
 
-Respond with ONLY a valid JSON object (no explanations, no markdown) in this format:
+    Respond with ONLY a valid JSON object (no explanations, no markdown) in this format:
 
-{
-  "products": [
     {
-      "brand": "BrandName",
-      "product_name": "Product Name",
-      "timeline": [start_seconds, end_seconds],
-      "location": [x_percent, y_percent, width_percent, height_percent],
-      "description": "brief factual description"
+      "products": [
+        {
+          "brand": "BrandName",
+          "product_name": "Product Name",
+          "timeline": [start_seconds, end_seconds],
+          "location": [x_percent, y_percent, width_percent, height_percent],
+          "description": "brief factual description"
+        }
+      ],
+      "tones": ["tone1", "tone2"],
+      "styles": ["style1", "style2"],
+      "creator": "Creator Name or null"
     }
-  ],
-  "tones": ["tone1", "tone2"],
-  "styles": ["style1", "style2"],
-  "creator": "Creator Name or null"
-}
 
-Rules for products:
-- Analyze 0–25%, 25–75%, and 75–100% of video.
-- Only include products with visible logos/branding.
-- Use numbers for timeline & location (0–100 for percentages).
-- If no products, use [].
-- Create separate entries for repeated brand appearances.
-- Timeline = when brand is clearly visible.
-- Locations = bounding box in percentages.
-- Keep descriptions brief and objective.
-- Check brands on cars, barriers, clothing, equipment, signage, etc.
+    Rules for products:
+    - Analyze 0–25%, 25–75%, and 75–100% of the video.
+    - Only include products with visible logos/branding.
+    - Use numbers for timeline & location (0–100 for percentages).
+    - If no products, use [].
+    - Create separate entries for repeated brand appearances.
+    - Timeline = when the logo is clearly visible (tight bounds).
 
-Rules for tones (pick 1–3):
-aspirational, playful, gritty, cozy, ironic, energetic, professional, casual, dramatic, humorous, serious, romantic, adventurous, nostalgic, futuristic, minimalist, bold, subtle, confident, mysterious
+    TIGHT TIMELINE RULES (micro-segmentation):
+    - Default max segment length: **≤ 8 seconds**. If visibility continues longer, **split into multiple entries**.
+    - Hard cap: **a segment must be ≤ min(12 seconds, 20% of total video length)**.
+    - Start at the **first second** the logo is clearly visible; end at the **first second** it becomes unclear/occluded/out of frame.
+    - If the logo disappears or is unclear for **≥ 1 second**, start a **new segment**.
+    - Never output a single wide range like **[0, videoDuration]** unless the logo is truly visible **continuously** the whole time (otherwise, split).
+    - Round to integers; ensure **end > start**. If unsure, **err on the shorter side** (do not pad).
+    - Skip ultra-brief flashes **< 1 second**.
 
-Rules for styles (pick 1–3):
-retro, modern, classic, vintage, contemporary, minimalist, maximalist, industrial, bohemian, luxury, street, corporate, artistic, cinematic, documentary, commercial, lifestyle, fashion, tech, food, travel, fitness, beauty, gaming
+    Location (bounding box of the **logo area**, not the whole object):
+    - [x, y, width, height] are percentages (0–100). Round to integers.
+    - **Never use 0** for width/height; enforce **width ≥ 3, height ≥ 3**. If smaller, omit that product.
+    - Keep descriptions brief and objective.
+    - Check brands on cars, barriers, clothing, equipment, signage, packaging, buildings, etc.
 
-Rules for creator:
-- If creator/influencer, include their name (look for watermark, intro, or ID).
-- Otherwise, use null.
-`;
+    Rules for tones (pick 1–3):
+    aspirational, playful, gritty, cozy, ironic, energetic, professional, casual, dramatic, humorous, serious, romantic, adventurous, nostalgic, futuristic, minimalist, bold, subtle, confident, mysterious
+
+    Rules for styles (pick 1–3):
+    retro, modern, classic, vintage, contemporary, minimalist, maximalist, industrial, bohemian, luxury, street, corporate, artistic, cinematic, documentary, commercial, lifestyle, fashion, tech, food, travel, fitness, beauty, gaming
+
+    Rules for creator:
+    - If creator/influencer, include their name (watermark/intro/ID).
+    - Otherwise, use null.
+
+    REFERENCE EXAMPLE (FORMAT ONLY; DO NOT COPY VALUES):
+    {
+      "products": [
+        { "brand": "Emirates", "product_name": "Sailboat Livery", "timeline": [12, 16], "location": [18, 22, 12, 8], "description": "logo on sail during close pass" },
+        { "brand": "Emirates", "product_name": "Sailboat Livery", "timeline": [44, 48], "location": [24, 30, 10, 7], "description": "logo visible mid-race" },
+        { "brand": "Emirates", "product_name": "Sailboat Livery", "timeline": [102, 107], "location": [20, 26, 11, 9], "description": "logo shown in finish segment" }
+      ],
+      "tones": ["energetic", "confident"],
+      "styles": ["documentary", "lifestyle"],
+      "creator": null
+    }
+    `;
+
 
 
     // Call Analyze API

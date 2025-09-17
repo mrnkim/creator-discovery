@@ -23,7 +23,7 @@ interface HeatmapProps {
 
 /**
  * Heatmap component for visualizing time-based data intensity
- * 
+ *
  * Renders a grid with rows representing entities (brands, products, videos)
  * and columns representing time buckets. Cell color intensity indicates value.
  */
@@ -48,19 +48,19 @@ const Heatmap: React.FC<HeatmapProps> = ({
   // Function to normalize values per row and get color
   const getColorForValue = (value: number, maxValue: number): string => {
     if (maxValue === 0) return `hsl(${colorHue}, 100%, 95%)`; // Very light for zero values
-    
+
     // Normalize value between 0 and 1
     const normalizedValue = Math.min(value / maxValue, 1);
-    
+
     // Map to lightness: 95% (very light) to 40% (darker)
     const lightness = 95 - (normalizedValue * 55);
-    
+
     return `hsl(${colorHue}, 100%, ${lightness}%)`;
   };
 
   return (
     <div className={clsx('w-full overflow-x-auto', className)}>
-      <div 
+      <div
         className="grid"
         style={{
           gridTemplateColumns: `160px repeat(${columns}, 1fr)`,
@@ -72,12 +72,12 @@ const Heatmap: React.FC<HeatmapProps> = ({
         <div className="bg-gray-100 p-2 font-medium text-sm border-b border-r border-gray-200" role="columnheader">
           {/* Empty cell for top-left corner */}
         </div>
-        
+
         {/* Column headers */}
         {Array.from({ length: columns }).map((_, colIndex) => (
-          <div 
+          <div
             key={`col-${colIndex}`}
-            className="bg-gray-100 p-1 text-xs text-center border-b border-r border-gray-200" 
+            className="bg-gray-100 p-1 text-xs text-center border-b border-r border-gray-200"
             role="columnheader"
           >
             {Math.round((colIndex / columns) * 100)}%
@@ -88,24 +88,25 @@ const Heatmap: React.FC<HeatmapProps> = ({
         {rows.map((row) => {
           // Find max value in this row for normalization
           const maxValue = Math.max(...row.buckets.map(b => b.value), 0.1); // Avoid division by zero
-          
+
           return (
             <React.Fragment key={row.id}>
               {/* Row label */}
-              <div 
+              <div
                 className="p-2 font-medium text-sm border-b border-r border-gray-200 truncate"
                 role="rowheader"
                 title={row.label || row.id}
               >
                 {row.label || row.id}
               </div>
-              
+
               {/* Row cells */}
               {Array.from({ length: columns }).map((_, colIndex) => {
-                const bucket = findBucketForColumn(row.buckets, colIndex);
+                // Direct index mapping instead of using findBucketForColumn
+                const bucket = row.buckets[colIndex];
                 const value = bucket?.value || 0;
                 const backgroundColor = getColorForValue(value, maxValue);
-                
+
                 return (
                   <div
                     key={`${row.id}-${colIndex}`}
