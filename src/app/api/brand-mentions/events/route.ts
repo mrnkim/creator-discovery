@@ -180,10 +180,16 @@ async function getEventsFromMetadata(videoId: string, indexId: string): Promise<
 
   const videoDetail = await response.json();
 
+  console.log(`🔍 Video details for ${videoId}:`, {
+    user_metadata: videoDetail.user_metadata,
+    brand_product_events_raw: videoDetail.user_metadata?.brand_product_events
+  });
+
   // Check if brand_product_events exists in user_metadata
   if (videoDetail.user_metadata?.brand_product_events) {
     try {
       const events = JSON.parse(videoDetail.user_metadata.brand_product_events);
+      console.log(`📊 Parsed events for ${videoId}:`, events);
 
       // Validate events with schema
       const validationResult = ProductEventArraySchema.safeParse(events);

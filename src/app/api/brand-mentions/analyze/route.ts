@@ -5,19 +5,20 @@ const API_KEY = process.env.TWELVELABS_API_KEY;
 const TWELVELABS_API_BASE_URL = process.env.TWELVELABS_API_BASE_URL;
 
 // Maximum gap in seconds between events to be considered for merging
-const MAX_GAP_SECONDS = 0.5;
+const MAX_GAP_SECONDS = 0.1;
 
 interface AnalyzeRequest {
   videoId: string;
   indexId: string;
   force?: boolean;
+  segmentAnalysis?: boolean; // New option for segment-based analysis
 }
 
 export async function POST(request: NextRequest) {
   try {
     // Parse request body
     const body: AnalyzeRequest = await request.json();
-    const { videoId, indexId } = body;
+    const { videoId, indexId, segmentAnalysis = false } = body;
 
     // Validate required parameters
     if (!videoId || !indexId) {
@@ -35,46 +36,71 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create prompt for Analyze API
-    const prompt = `
-    Analyze this video and provide comprehensive information about brand mentions, video tone, style, and creator information.
+    // Get video duration for segment analysis
+    let videoDuration = 0;
+    if (segmentAnalysis) {
+      try {
+        const videoUrl = `${TWELVELABS_API_BASE_URL}/indexes/${indexId}/videos/${videoId}`;
+        const videoResponse = await fetch(videoUrl, {
+          headers: {
+            'x-api-key': API_KEY,
+          },
+        });
 
-    IMPORTANT: Respond with ONLY a valid JSON object. No explanations, no markdown, no additional text.
-
-    Use this exact format:
-    {
-      "products": [
-        {
-          "brand": "BrandName",
-          "product_name": "Product Name",
-          "timeline": [start_seconds, end_seconds],
-          "location": [x_percent, y_percent, width_percent, height_percent],
-          "description": "brief description of what is shown"
+        if (videoResponse.ok) {
+          const videoData = await videoResponse.json();
+          videoDuration = videoData.system_metadata?.duration || 0;
+          console.log(`📹 Video duration: ${videoDuration} seconds`);
         }
-      ],
-      "tones": ["tone1", "tone2"],
-      "styles": ["style1", "style2"],
-      "creator": "Creator Name or null"
+      } catch (error) {
+        console.warn('⚠️ Failed to get video duration:', error);
+      }
     }
 
-    Rules for products:
-    - Only include products with visible branding/logos
-    - Use numbers for timeline and location (no strings)
-    - Location values should be 0-100 (percentages)
-    - If no products found, use empty array: []
-    - Keep descriptions brief and factual
+    // Create prompt for Analyze API
+    const prompt = `
+You are analyzing a video about ${videoDuration > 0 ? Math.round(videoDuration) : 'several minutes'} seconds long.
+Scan the ENTIRE video from start to finish (0%–100%). Do not stop early.
 
-    Rules for tones (select 1-3 most relevant):
-    - aspirational, playful, gritty, cozy, ironic, energetic, professional, casual, dramatic, humorous, serious, romantic, adventurous, nostalgic, futuristic, minimalist, bold, subtle, confident, mysterious
+Respond with ONLY a valid JSON object (no explanations, no markdown) in this format:
 
-    Rules for styles (select 1-3 most relevant):
-    - retro, modern, classic, vintage, contemporary, minimalist, maximalist, industrial, bohemian, luxury, street, corporate, artistic, cinematic, documentary, commercial, lifestyle, fashion, tech, food, travel, fitness, beauty, gaming
+{
+  "products": [
+    {
+      "brand": "BrandName",
+      "product_name": "Product Name",
+      "timeline": [start_seconds, end_seconds],
+      "location": [x_percent, y_percent, width_percent, height_percent],
+      "description": "brief factual description"
+    }
+  ],
+  "tones": ["tone1", "tone2"],
+  "styles": ["style1", "style2"],
+  "creator": "Creator Name or null"
+}
 
-    Rules for creator:
-    - If this appears to be a creator/influencer video, identify the creator's name
-    - If not a creator video, use null
-    - Look for watermarks, intros, or other creator identification
-    `;
+Rules for products:
+- Analyze 0–25%, 25–75%, and 75–100% of video.
+- Only include products with visible logos/branding.
+- Use numbers for timeline & location (0–100 for percentages).
+- If no products, use [].
+- Create separate entries for repeated brand appearances.
+- Timeline = when brand is clearly visible.
+- Locations = bounding box in percentages.
+- Keep descriptions brief and objective.
+- Check brands on cars, barriers, clothing, equipment, signage, etc.
+
+Rules for tones (pick 1–3):
+aspirational, playful, gritty, cozy, ironic, energetic, professional, casual, dramatic, humorous, serious, romantic, adventurous, nostalgic, futuristic, minimalist, bold, subtle, confident, mysterious
+
+Rules for styles (pick 1–3):
+retro, modern, classic, vintage, contemporary, minimalist, maximalist, industrial, bohemian, luxury, street, corporate, artistic, cinematic, documentary, commercial, lifestyle, fashion, tech, food, travel, fitness, beauty, gaming
+
+Rules for creator:
+- If creator/influencer, include their name (look for watermark, intro, or ID).
+- Otherwise, use null.
+`;
+
 
     // Call Analyze API
     const analyzeUrl = `${TWELVELABS_API_BASE_URL}/analyze`;
@@ -208,11 +234,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Convert to ProductEvent[] format with type safety
-    const events: ProductEvent[] = parsedEvents.map(item => {
+    const events: ProductEvent[] = parsedEvents.map((item, index) => {
       // Type guard for item properties
       const eventItem = item as Record<string, unknown>;
       const timeline = Array.isArray(eventItem.timeline) ? eventItem.timeline : [0, 0];
       const location = Array.isArray(eventItem.location) ? eventItem.location : [0, 0, 0, 0];
+
+      console.log(`🔍 Parsing event ${index} for video ${videoId}:`, {
+        original_item: eventItem,
+        timeline: timeline,
+        location: location
+      });
 
       return {
         video_id: videoId,
@@ -241,9 +273,9 @@ export async function POST(request: NextRequest) {
       console.log(`✅ Events validation passed for video ${videoId}`);
     }
 
-    // Deduplicate events
-    const deduplicatedEvents = deduplicateEvents(events);
-    console.log(`✅ Found ${deduplicatedEvents.length} brand mentions after deduplication`);
+    // Skip deduplication for now to preserve individual events
+    const deduplicatedEvents = events;
+    console.log(`✅ Found ${deduplicatedEvents.length} brand mentions (deduplication skipped)`);
 
     // Validate video analysis metadata
     const analysisValidationResult = VideoAnalysisMetadataSchema.safeParse(videoAnalysis);
@@ -264,6 +296,12 @@ export async function POST(request: NextRequest) {
       video_styles: videoAnalysis.styles ? JSON.stringify(videoAnalysis.styles) : undefined,
       video_creator: videoAnalysis.creator || undefined
     };
+
+    console.log(`💾 Saving metadata for video ${videoId}:`, {
+      brand_product_events: metadata.brand_product_events,
+      event_count: deduplicatedEvents.length,
+      events: deduplicatedEvents
+    });
 
     // Update video metadata
     const updateUrl = `${TWELVELABS_API_BASE_URL}/indexes/${indexId}/videos/${videoId}`;

@@ -32,9 +32,9 @@ export function bucketizeTimeline(totalDuration: number, numBuckets: number): { 
  * @returns Overlap duration in seconds
  */
 function calculateOverlap(
-  eventStart: number, 
-  eventEnd: number, 
-  bucketStart: number, 
+  eventStart: number,
+  eventEnd: number,
+  bucketStart: number,
   bucketEnd: number
 ): number {
   return Math.max(0, Math.min(eventEnd, bucketEnd) - Math.max(eventStart, bucketStart));
@@ -48,33 +48,34 @@ function calculateOverlap(
  * @returns Array of heatmap rows with bucket values
  */
 export function aggregatePerVideo(
-  events: ProductEvent[], 
-  numBuckets: number, 
-  by: 'brand' | 'product' = 'brand'
+  events: ProductEvent[],
+  numBuckets: number,
+  by: 'brand' | 'product' = 'brand',
+  videoDuration?: number
 ): PerVideoHeatmapRow[] {
   if (!events || events.length === 0) {
     return [];
   }
 
-  // Find video duration from the latest event end time
-  const videoDuration = Math.max(...events.map(event => event.timeline_end));
-  
-  if (videoDuration <= 0) {
+  // Use provided duration or find from the latest event end time
+  const duration = videoDuration || Math.max(...events.map(event => event.timeline_end));
+
+  if (duration <= 0) {
     return [];
   }
 
   // Create time buckets in seconds
-  const bucketDuration = videoDuration / numBuckets;
+  const bucketDuration = duration / numBuckets;
   const buckets = Array.from({ length: numBuckets }, (_, i) => ({
     startSec: i * bucketDuration,
     endSec: (i + 1) * bucketDuration,
-    startPct: (i * bucketDuration / videoDuration) * 100,
-    endPct: ((i + 1) * bucketDuration / videoDuration) * 100
+    startPct: (i * bucketDuration / duration) * 100,
+    endPct: ((i + 1) * bucketDuration / duration) * 100
   }));
 
   // Group events by brand or product
   const groupedEvents: Record<string, ProductEvent[]> = {};
-  
+
   events.forEach(event => {
     const key = by === 'brand' ? event.brand : event.product_name;
     if (!groupedEvents[key]) {
@@ -90,7 +91,7 @@ export function aggregatePerVideo(
     const heatmapBuckets: HeatmapBucket[] = buckets.map(bucket => {
       // Calculate total overlap duration for all events in this group with this bucket
       let value = 0;
-      
+
       groupEvents.forEach(event => {
         const overlap = calculateOverlap(
           event.timeline_start,
@@ -138,7 +139,7 @@ export function aggregateLibrary(
   brandFilter?: string[]
 ): LibraryHeatmapRow[] {
   const videoIds = Object.keys(eventsByVideo);
-  
+
   if (videoIds.length === 0) {
     return [];
   }
@@ -150,7 +151,7 @@ export function aggregateLibrary(
   return videoIds.map(videoId => {
     const events = eventsByVideo[videoId] || [];
     const duration = videoDurations[videoId] || 0;
-    
+
     if (duration <= 0 || events.length === 0) {
       // Return empty buckets if no duration or events
       return {
@@ -173,10 +174,10 @@ export function aggregateLibrary(
       // Convert percentage to seconds for this video
       const startSec = (bucket.start / 100) * duration;
       const endSec = (bucket.end / 100) * duration;
-      
+
       // Calculate total overlap duration for all events in this bucket
       let totalOverlap = 0;
-      
+
       filteredEvents.forEach(event => {
         const overlap = calculateOverlap(
           event.timeline_start,
@@ -213,7 +214,7 @@ export function aggregateLibrary(
  */
 export function normalizeHeatmapValues<T extends { buckets: HeatmapBucket[] }>(rows: T[]): T[] {
   if (rows.length === 0) return rows;
-  
+
   // Find the maximum value across all buckets
   let maxValue = 0;
   rows.forEach(row => {
@@ -221,9 +222,9 @@ export function normalizeHeatmapValues<T extends { buckets: HeatmapBucket[] }>(r
       maxValue = Math.max(maxValue, bucket.value);
     });
   });
-  
+
   if (maxValue === 0) return rows;
-  
+
   // Create a deep copy and normalize values
   return rows.map(row => ({
     ...row,

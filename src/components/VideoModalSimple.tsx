@@ -114,10 +114,15 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
               onTimeUpdate={(e) => {
                 const el = e.currentTarget as HTMLVideoElement;
                 setCurrentTime(el.currentTime);
+
+                // Loop back to start if we've reached the end time
                 if (endTime !== undefined && endTime !== null && el.currentTime >= endTime) {
-                  el.pause();
-                  el.currentTime = endTime;
-                  setIsPlaying(false);
+                  el.currentTime = startTime || 0;
+                }
+
+                // Seek back to start if we've gone before the start time
+                if (startTime !== undefined && startTime !== null && el.currentTime < startTime) {
+                  el.currentTime = startTime;
                 }
               }}
               onError={(error) => {
@@ -125,15 +130,16 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
               }}
             />
 
-            {/* Bounding box overlay */}
-            {showOverlay && bboxNorm && (
+            {/* Bounding box overlay - only show during the segment */}
+            {showOverlay && bboxNorm && startTime !== undefined && endTime !== undefined &&
+             currentTime >= startTime && currentTime <= endTime && (
               <div
-                className="absolute border-2 border-red-500 rounded"
+                className="absolute border-2 border-red-500 rounded bg-red-500/20"
                 style={{
-                  left: `${bboxNorm.x * 100}%`,
-                  top: `${bboxNorm.y * 100}%`,
-                  width: `${bboxNorm.w * 100}%`,
-                  height: `${bboxNorm.h * 100}%`,
+                  left: `${bboxNorm.x}%`,
+                  top: `${bboxNorm.y}%`,
+                  width: `${bboxNorm.w}%`,
+                  height: `${bboxNorm.h}%`,
                 }}
               />
             )}
@@ -142,8 +148,23 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
           {/* Current segment info */}
           {(startTime !== undefined || endTime !== undefined) && (
             <div className="mt-3 text-xs text-gray-500">
-              Segment: {Math.max(0, startTime ?? 0).toFixed(2)}s – {endTime?.toFixed(2) ?? 'End'}
-              {Number.isFinite(currentTime) && ` • Now: ${currentTime.toFixed(2)}s`}
+              <div className="font-medium text-gray-700 mb-1">
+                Segment: {Math.max(0, startTime ?? 0).toFixed(2)}s – {endTime?.toFixed(2) ?? 'End'}s
+              </div>
+              {Number.isFinite(currentTime) && (
+                <div className="text-gray-500">
+                  Current: {currentTime.toFixed(2)}s
+                  {startTime !== undefined && endTime !== undefined && (
+                    <span className={`ml-2 px-2 py-1 rounded text-xs ${
+                      currentTime >= startTime && currentTime <= endTime
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {currentTime >= startTime && currentTime <= endTime ? 'In Segment' : 'Out of Segment'}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

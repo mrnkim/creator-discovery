@@ -38,6 +38,7 @@ export default function BrandMentionDetectionPage() {
   const [viewMode, setViewMode] = useState<'library' | 'per-video'>('library');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isEventsLoading, setIsEventsLoading] = useState<boolean>(false);
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   // Modal state
@@ -275,7 +276,8 @@ export default function BrandMentionDetectionPage() {
       const response = await axios.get('/api/brand-mentions/events', {
         params: {
           videoId,
-          indexId: creatorIndexId
+          indexId: creatorIndexId,
+          force: true  // Force reanalysis to get fresh data
         }
       });
 
@@ -297,6 +299,44 @@ export default function BrandMentionDetectionPage() {
       // Don't set global error, just log it
     } finally {
       setIsEventsLoading(false);
+    }
+  }
+
+  // Force analyze a single video
+  async function forceAnalyzeVideo(videoId: string) {
+    if (!creatorIndexId) return;
+
+    setIsAnalyzing(true);
+    console.log(`🔄 Force analyzing video ${videoId}...`);
+
+    try {
+      const response = await axios.post('/api/brand-mentions/analyze', {
+        videoId,
+        indexId: creatorIndexId,
+        force: true,
+        segmentAnalysis: true  // Enable segment-based analysis for better coverage
+      });
+
+      if (response.data && response.data.events) {
+        setEventsByVideo(prevEvents => ({
+          ...prevEvents,
+          [videoId]: response.data.events
+        }));
+
+        if (response.data.analysis) {
+          setAnalysisByVideo(prevAnalysis => ({
+            ...prevAnalysis,
+            [videoId]: response.data.analysis
+          }));
+        }
+
+        console.log(`✅ Force analysis completed for video ${videoId}:`, response.data);
+      }
+    } catch (error) {
+      console.error(`❌ Error force analyzing video ${videoId}:`, error);
+      setError(`Failed to analyze video: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsAnalyzing(false);
     }
   }
 
@@ -333,25 +373,90 @@ export default function BrandMentionDetectionPage() {
       event.timeline_end >= bucketStartSec && event.timeline_start <= bucketEndSec
     );
 
-    if (overlappingEvents.length === 0) return;
+    if (overlappingEvents.length === 0) {
+      console.log('🚫 No overlapping events found for bucket', {
+        rowId,
+        colIndex,
+        bucketStartSec,
+        bucketEndSec,
+        brandEvents: brandEvents.map(e => ({
+          brand: e.brand,
+          start: e.timeline_start,
+          end: e.timeline_end
+        }))
+      });
+      return;
+    }
 
-    // Use the first overlapping event
-    const event = overlappingEvents[0];
+    // Find the event that best matches this bucket (closest to bucket center)
+    const bucketCenter = (bucketStartSec + bucketEndSec) / 2;
+    const event = overlappingEvents.reduce((best, current) => {
+      const currentCenter = (current.timeline_start + current.timeline_end) / 2;
+      const bestCenter = (best.timeline_start + best.timeline_end) / 2;
+
+      const currentDistance = Math.abs(currentCenter - bucketCenter);
+      const bestDistance = Math.abs(bestCenter - bucketCenter);
+
+      return currentDistance < bestDistance ? current : best;
+    });
+
+    // Create a more precise segment based on the bucket
+    const preciseStart = Math.max(event.timeline_start, bucketStartSec);
+    const preciseEnd = Math.min(event.timeline_end, bucketEndSec);
+
+    // Determine the best segment to play
+    const bucketDuration = bucketEndSec - bucketStartSec;
+    const eventDuration = event.timeline_end - event.timeline_start;
+
+    let finalStart = event.timeline_start;
+    let finalEnd = event.timeline_end;
+
+    // If the event spans the entire video (or most of it), use a reasonable segment
+    if (eventDuration > duration * 0.8) {
+      // For events that span most of the video, use a 10-second segment around the bucket center
+      const bucketCenter = (bucketStartSec + bucketEndSec) / 2;
+      finalStart = Math.max(0, bucketCenter - 5);
+      finalEnd = Math.min(duration, bucketCenter + 5);
+    } else if (bucketDuration < eventDuration * 0.3) {
+      // For very small buckets compared to event, use bucket boundaries
+      finalStart = bucketStartSec;
+      finalEnd = bucketEndSec;
+    }
+    // Otherwise, use the full event duration
 
     console.log('🎬 BrandMentionDetection: Setting modal video', {
       videoId: selectedVideoId,
       videoUrl: video.hls?.video_url,
       hlsData: video.hls,
       event: event,
-      title: `${event.brand}: ${event.product_name}`
+      title: `${event.brand}: ${event.product_name}`,
+      bucketInfo: {
+        colIndex,
+        bucketStartSec,
+        bucketEndSec,
+        bucketCenter,
+        duration
+      },
+      timingInfo: {
+        originalEvent: { start: event.timeline_start, end: event.timeline_end },
+        bucket: { start: bucketStartSec, end: bucketEndSec },
+        final: { start: finalStart, end: finalEnd },
+        bucketDuration,
+        eventDuration,
+        videoDuration: duration,
+        eventSpansMostOfVideo: eventDuration > duration * 0.8,
+        bucketMuchSmallerThanEvent: bucketDuration < eventDuration * 0.3
+      },
+      allBrandEvents: brandEvents,
+      overlappingEvents: overlappingEvents
     });
 
     setModalVideo({
       videoId: selectedVideoId!,
       videoUrl: video.hls.video_url,
       title: `${event.brand}: ${event.product_name}`,
-      start: event.timeline_start,
-      end: event.timeline_end,
+      start: finalStart,
+      end: finalEnd,
       bbox: event.bbox_norm,
       description: event.description
     });
@@ -441,7 +546,8 @@ export default function BrandMentionDetectionPage() {
     } else if (selectedVideoId) {
       // Per-video view: brands as rows, time buckets as columns
       const events = filteredEvents[selectedVideoId] || [];
-      const perVideoRows = aggregatePerVideo(events, NUM_BUCKETS, 'brand');
+      const videoDuration = videoDurations[selectedVideoId] || 0;
+      const perVideoRows = aggregatePerVideo(events, NUM_BUCKETS, 'brand', videoDuration);
       const rowsWithTotal = perVideoRows.map(row => ({
         id: row.key,
         label: row.label,
@@ -518,17 +624,53 @@ export default function BrandMentionDetectionPage() {
                 </div>
 
                 {viewMode === 'per-video' && selectedVideoId && (
-                  <button
-                    onClick={() => {
-                      setViewMode('library');
-                      setSelectedVideoId(null);
-                    }}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    ← Back to Library
-                  </button>
+                  <div className="flex items-center space-x-4">
+                    <button
+                      onClick={() => forceAnalyzeVideo(selectedVideoId)}
+                      disabled={isAnalyzing}
+                      className={clsx(
+                        'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                        isAnalyzing
+                          ? 'bg-gray-400 text-white cursor-not-allowed'
+                          : 'bg-orange-600 text-white hover:bg-orange-700'
+                      )}
+                    >
+                      {isAnalyzing ? (
+                        <div className="flex items-center space-x-2">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Analyzing...</span>
+                        </div>
+                      ) : (
+                        '🔄 Force Re-analyze'
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setViewMode('library');
+                        setSelectedVideoId(null);
+                      }}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      ← Back to Library
+                    </button>
+                  </div>
                 )}
               </div>
+
+              {/* Error message */}
+              {error && (
+                <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span>{error}</span>
+                    <button
+                      onClick={() => setError(null)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Filters section */}
               <div className="mb-8 bg-gray-50 p-4 rounded-lg">
