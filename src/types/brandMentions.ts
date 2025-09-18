@@ -83,6 +83,7 @@ export type HeatmapBucket = {
   start: number;
   end: number;
   value: number;
+  brands?: string[]; // Optional: brands mentioned in this bucket
 };
 
 /**

@@ -474,6 +474,18 @@ export default function BrandMentionDetectionPage() {
       endPct: ((i + 1) * bucketDurationSec / duration) * 100
     }));
 
+    console.log(`🔧 Click Handler - Bucket calculation for colIndex ${colIndex}:`, {
+      duration,
+      numBuckets: NUM_BUCKETS,
+      bucketDurationSec,
+      clickedBucket: {
+        startSec: buckets[colIndex].startSec,
+        endSec: buckets[colIndex].endSec,
+        startPct: buckets[colIndex].startPct,
+        endPct: buckets[colIndex].endPct
+      }
+    });
+
     // Use the EXACT same logic as heatmap generation to find which event was assigned to this bucket
     // First, create the event-to-bucket mapping exactly like in heatmap.ts
     const eventToBucketMap = new Map<number, number>(); // eventIndex -> bucketIndex
@@ -493,6 +505,15 @@ export default function BrandMentionDetectionPage() {
 
       if (bestBucketIndex >= 0) {
         eventToBucketMap.set(eventIndex, bestBucketIndex);
+        console.log(`🎯 Click Handler - Event ${event.brand} (${event.timeline_start}-${event.timeline_end}) assigned to bucket ${bestBucketIndex}:`, {
+          bucket: {
+            startSec: buckets[bestBucketIndex].startSec.toFixed(2),
+            endSec: buckets[bestBucketIndex].endSec.toFixed(2),
+            startPct: buckets[bestBucketIndex].startPct.toFixed(1),
+            endPct: buckets[bestBucketIndex].endPct.toFixed(1)
+          },
+          overlap: bestOverlap.toFixed(2)
+        });
       }
     });
 
@@ -516,6 +537,12 @@ export default function BrandMentionDetectionPage() {
       console.log(`    Event ${eventIndex} (${brandEvents[eventIndex].timeline_start}-${brandEvents[eventIndex].timeline_end}s) → Bucket ${bucketIndex}`);
     });
     console.log(`  Assigned event for bucket ${colIndex}:`, assignedEvent ? `${(assignedEvent as ProductEvent).timeline_start}-${(assignedEvent as ProductEvent).timeline_end}s` : 'None');
+
+    if (assignedEvent) {
+      console.log(`🏆 Click Handler - Final selected event: ${(assignedEvent as ProductEvent).timeline_start}-${(assignedEvent as ProductEvent).timeline_end}s (${(assignedEvent as ProductEvent).brand})`);
+    } else {
+      console.log(`🚫 Click Handler - No event assigned to bucket ${colIndex}`);
+    }
 
     // Also log which buckets should have values
     const bucketsWithEvents = Array.from(new Set(eventToBucketMap.values())).sort((a, b) => a - b);
@@ -654,18 +681,19 @@ export default function BrandMentionDetectionPage() {
       // map TwelveLabs rows to UI-friendly rows
       const uiRows = libraryRows.map(row => {
         const video = videos.find(v => v._id === row.video_id);
-        // Prioritize creator name, fallback to video title, then video ID
+        // Prioritize creator name, fallback to video title, then show "Unknown Creator"
         const label = video ?
           (video.user_metadata?.creator ||
            video.user_metadata?.video_creator ||
            video.user_metadata?.creator_id ||
            video.system_metadata?.video_title ||
-           row.video_id) :
+           "Unknown Creator") :
           row.video_id;
         return {
           id: row.video_id,
           label: label.toString(),
-          buckets: row.buckets
+          buckets: row.buckets,
+          videoDuration: videoDurations[row.video_id] // Include video duration for this row
         };
       });
 
@@ -679,7 +707,8 @@ export default function BrandMentionDetectionPage() {
       const totalRow = {
         id: '__TOTAL__',
         label: 'Total Exposure',
-        buckets: totalBuckets
+        buckets: totalBuckets,
+        videoDuration: undefined // Total row doesn't have a specific video duration
       };
 
       return [totalRow, ...uiRows];
@@ -713,7 +742,8 @@ export default function BrandMentionDetectionPage() {
       const rowsWithTotal = perVideoRows.map(row => ({
         id: row.key,
         label: row.label,
-        buckets: row.buckets
+        buckets: row.buckets,
+        videoDuration: videoDuration // Use the current video's duration
       }));
 
       if (rowsWithTotal.length > 0) {
@@ -725,7 +755,8 @@ export default function BrandMentionDetectionPage() {
         rowsWithTotal.unshift({
           id: '__TOTAL__',
           label: 'Total Exposure',
-          buckets: totalBuckets
+          buckets: totalBuckets,
+          videoDuration: videoDuration // Use the current video's duration
         });
       }
 
@@ -734,6 +765,7 @@ export default function BrandMentionDetectionPage() {
 
     return [];
   }, [viewMode, selectedVideoId, filteredEvents, videos, videoDurations, selectedBrands]);
+
 
   return (
     <div className="min-h-screen bg-white">
@@ -1162,6 +1194,8 @@ export default function BrandMentionDetectionPage() {
                         columns={NUM_BUCKETS}
                         onCellClick={handleHeatmapCellClick}
                         className="mb-4"
+                        videoDuration={viewMode === 'per-video' && selectedVideoId ? videoDurations[selectedVideoId] : undefined}
+                        viewMode={viewMode}
                       />
                     </div>
                     <p className="text-xs text-gray-500 text-center">
@@ -1221,7 +1255,7 @@ export default function BrandMentionDetectionPage() {
                         </div>
                         <div className="p-3">
                           <h4 className="font-medium truncate">
-                            {video.system_metadata?.video_title || `Video ${video._id}`}
+                            {video.system_metadata?.filename?.replace(/\.mp4$/i, '') || `Video ${video._id}`}
                           </h4>
                           <p className="text-xs text-gray-500 truncate">
                             Creator:{' '}

@@ -66,6 +66,17 @@ export function aggregatePerVideo(
 
   // Create time buckets in seconds
   const bucketDuration = duration / numBuckets;
+  console.log(`🔍 Per-Video View - Video bucket calculation:`, {
+    duration,
+    numBuckets,
+    bucketDuration,
+    events: events.map(e => ({
+      brand: e.brand,
+      start: e.timeline_start,
+      end: e.timeline_end
+    }))
+  });
+
   const buckets = Array.from({ length: numBuckets }, (_, i) => ({
     startSec: i * bucketDuration,
     endSec: (i + 1) * bucketDuration,
@@ -121,12 +132,16 @@ export function aggregatePerVideo(
       if (bestBucketIndex >= 0) {
         eventToBucketMap.set(eventIndex, bestBucketIndex);
 
-        if (key === 'Emirates') {
-          console.log(`📊 Emirates event ${eventIndex} (${event.timeline_start}-${event.timeline_end}) assigned to bucket ${bestBucketIndex}:`, {
-            bucket: { start: buckets[bestBucketIndex].startSec, end: buckets[bestBucketIndex].endSec },
-            overlap: bestOverlap
-          });
-        }
+        console.log(`📊 Per-Video View - Event ${event.brand} (${event.timeline_start}-${event.timeline_end}) assigned to bucket ${bestBucketIndex}:`, {
+          bucket: {
+            startSec: buckets[bestBucketIndex].startSec.toFixed(2),
+            endSec: buckets[bestBucketIndex].endSec.toFixed(2),
+            startPct: buckets[bestBucketIndex].startPct.toFixed(1),
+            endPct: buckets[bestBucketIndex].endPct.toFixed(1)
+          },
+          overlap: bestOverlap.toFixed(2),
+          bucketDuration: bucketDuration.toFixed(2)
+        });
       }
     });
 
@@ -193,8 +208,7 @@ export function aggregateLibrary(
     return [];
   }
 
-  // Create normalized buckets (0-100%)
-  const normalizedBuckets = bucketizeTimeline(100, numBuckets);
+  // We'll create buckets per video to match per-video view granularity
 
   // Process each video
   return videoIds.map(videoId => {
@@ -203,13 +217,15 @@ export function aggregateLibrary(
 
     if (duration <= 0 || events.length === 0) {
       // Return empty buckets if no duration or events
+      const emptyBuckets = Array.from({ length: numBuckets }, (_, i) => ({
+        start: (i / numBuckets) * 100,
+        end: ((i + 1) / numBuckets) * 100,
+        value: 0,
+        brands: [] as string[]
+      }));
       return {
         video_id: videoId,
-        buckets: normalizedBuckets.map(bucket => ({
-          start: bucket.start,
-          end: bucket.end,
-          value: 0
-        }))
+        buckets: emptyBuckets
       };
     }
 
@@ -218,29 +234,87 @@ export function aggregateLibrary(
       ? events.filter(event => brandFilter.includes(event.brand))
       : events;
 
-    // Map normalized buckets to actual video time and calculate values
-    const buckets: HeatmapBucket[] = normalizedBuckets.map(bucket => {
-      // Convert percentage to seconds for this video
-      const startSec = (bucket.start / 100) * duration;
-      const endSec = (bucket.end / 100) * duration;
+    // Create time buckets in seconds (same as per-video view)
+    const bucketDuration = duration / numBuckets;
+    console.log(`🔍 Library View - Video ${videoId} bucket calculation:`, {
+      duration,
+      numBuckets,
+      bucketDuration,
+      events: filteredEvents.map(e => ({
+        brand: e.brand,
+        start: e.timeline_start,
+        end: e.timeline_end
+      }))
+    });
 
-      // Calculate total overlap duration for all events in this bucket
-      let totalOverlap = 0;
+    // First, assign each event to its best matching bucket (same logic as per-video view)
+    const eventToBucketMap = new Map<number, number>(); // eventIndex -> bucketIndex
 
-      filteredEvents.forEach(event => {
+    filteredEvents.forEach((event, eventIndex) => {
+      let bestBucketIndex = -1;
+      let bestOverlap = 0;
+
+      for (let bucketIndex = 0; bucketIndex < numBuckets; bucketIndex++) {
+        const startSec = bucketIndex * bucketDuration;
+        const endSec = (bucketIndex + 1) * bucketDuration;
+
         const overlap = calculateOverlap(
           event.timeline_start,
           event.timeline_end,
           startSec,
           endSec
         );
-        totalOverlap += overlap;
+
+        if (overlap > bestOverlap) {
+          bestOverlap = overlap;
+          bestBucketIndex = bucketIndex;
+        }
+      }
+
+      if (bestBucketIndex >= 0) {
+        eventToBucketMap.set(eventIndex, bestBucketIndex);
+        console.log(`📊 Library View - Event ${event.brand} (${event.timeline_start}-${event.timeline_end}) assigned to bucket ${bestBucketIndex}:`, {
+          bucket: {
+            startSec: (bestBucketIndex * bucketDuration).toFixed(2),
+            endSec: ((bestBucketIndex + 1) * bucketDuration).toFixed(2),
+            startPct: ((bestBucketIndex * bucketDuration / duration) * 100).toFixed(1),
+            endPct: (((bestBucketIndex + 1) * bucketDuration / duration) * 100).toFixed(1)
+          },
+          overlap: bestOverlap.toFixed(2),
+          bucketDuration: bucketDuration.toFixed(2)
+        });
+      }
+    });
+
+    // Now create buckets with values only from assigned events
+    const buckets: HeatmapBucket[] = Array.from({ length: numBuckets }, (_, i) => {
+      const startSec = i * bucketDuration;
+      const endSec = (i + 1) * bucketDuration;
+      const startPct = (startSec / duration) * 100;
+      const endPct = (endSec / duration) * 100;
+
+      let totalOverlap = 0;
+      const brandsInBucket = new Set<string>();
+
+      // Add value only from events assigned to this specific bucket
+      filteredEvents.forEach((event, eventIndex) => {
+        if (eventToBucketMap.get(eventIndex) === i) {
+          const overlap = calculateOverlap(
+            event.timeline_start,
+            event.timeline_end,
+            startSec,
+            endSec
+          );
+          totalOverlap += overlap;
+          brandsInBucket.add(event.brand);
+        }
       });
 
       return {
-        start: bucket.start,
-        end: bucket.end,
-        value: totalOverlap
+        start: startPct,
+        end: endPct,
+        value: totalOverlap,
+        brands: Array.from(brandsInBucket)
       };
     });
 

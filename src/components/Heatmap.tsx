@@ -5,12 +5,14 @@ interface Bucket {
   start: number;
   end: number;
   value: number;
+  brands?: string[];
 }
 
 interface HeatmapRow {
   id: string;
   label?: string;
   buckets: Bucket[];
+  videoDuration?: number; // Optional video duration for this specific row
 }
 
 interface HeatmapProps {
@@ -19,6 +21,8 @@ interface HeatmapProps {
   onCellClick?: (rowId: string, colIndex: number) => void;
   className?: string;
   colorHue?: number; // Optional hue value for HSL color (default: 210 - blue)
+  videoDuration?: number; // Optional video duration for accurate bucket duration calculation
+  viewMode?: 'library' | 'per-video'; // View mode to determine tooltip content
 }
 
 /**
@@ -33,6 +37,8 @@ const Heatmap: React.FC<HeatmapProps> = ({
   onCellClick,
   className,
   colorHue = 210, // Default to blue
+  videoDuration,
+  viewMode = 'per-video', // Default to per-video view
 }) => {
   // Function to find which bucket corresponds to a column index
   const findBucketForColumn = (buckets: Bucket[], colIndex: number): Bucket | null => {
@@ -117,8 +123,49 @@ const Heatmap: React.FC<HeatmapProps> = ({
                     style={{ backgroundColor }}
                     role="gridcell"
                     onClick={() => onCellClick?.(row.id, colIndex)}
-                    aria-label={`Value ${value} at position ${colIndex}`}
-                    title={bucket ? `Value: ${value} (${bucket.start}% - ${bucket.end}%)` : 'No data'}
+                    aria-label={`Duration ${Math.round(value)}s at position ${colIndex}`}
+                    title={bucket ? (() => {
+                      if (viewMode === 'library') {
+                        // Library view: show only brand names
+                        if (bucket.brands && bucket.brands.length > 0) {
+                          return `Brands: ${bucket.brands.join(', ')}`;
+                        }
+                        return 'No brands detected';
+                      } else {
+                        // Per-video view: show duration and brands
+                        // Calculate the actual playback duration using the same logic as the click handler
+                        let playbackDuration = 0;
+
+                        // Use row-specific video duration if available, otherwise fall back to global videoDuration
+                        const currentVideoDuration = row.videoDuration || videoDuration;
+
+                        if (currentVideoDuration) {
+                          const bucketDuration = ((bucket.end - bucket.start) / 100) * currentVideoDuration;
+                          const eventDuration = value; // This is the event duration from the bucket value
+
+                          // Apply the same logic as in the click handler
+                          if (eventDuration > currentVideoDuration * 0.8) {
+                            // For events that span most of the video, use a 10-second segment
+                            playbackDuration = 10;
+                          } else if (bucketDuration < eventDuration * 0.3) {
+                            // For very small buckets compared to event, use bucket boundaries
+                            playbackDuration = bucketDuration;
+                          } else {
+                            // Otherwise, use the full event duration
+                            playbackDuration = eventDuration;
+                          }
+                        } else {
+                          // Fallback: use the event duration
+                          playbackDuration = value;
+                        }
+
+                        const duration = `Duration: ${Math.round(playbackDuration)}s`;
+                        if (bucket.brands && bucket.brands.length > 0) {
+                          return `${duration}\nBrands: ${bucket.brands.join(', ')}`;
+                        }
+                        return duration;
+                      }
+                    })() : 'No data'}
                     tabIndex={onCellClick ? 0 : undefined}
                     onKeyDown={(e) => {
                       if (onCellClick && (e.key === 'Enter' || e.key === ' ')) {
