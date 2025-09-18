@@ -997,7 +997,7 @@ export default function BrandMentionDetectionPage() {
                           {eventsByVideo[video._id] && (
                             <div className="absolute top-2 right-2">
                               <span className="px-2 py-1 text-xs font-bold bg-green-600 text-white rounded-full">
-                                {eventsByVideo[video._id].length} brands
+                                {new Set(eventsByVideo[video._id].map(e => e.brand)).size} brands
                               </span>
                             </div>
                           )}

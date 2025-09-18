@@ -29,6 +29,7 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
   endTime,
   bboxNorm,
   showOverlay,
+  description,
 }) => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -82,13 +83,25 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
         className="relative rounded-[45.60px] shadow-xl max-w-3xl w-full flex flex-col overflow-hidden bg-white"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="m-2 ml-4 p-4 flex justify-between items-center">
-          <h3 className="text-2xl font-medium">
-            {title}
-          </h3>
+        <div className="m-2 ml-4 p-4 flex justify-between items-start">
+          <div className="flex-1">
+            <h3 className="text-2xl font-medium mb-2">
+              {title?.split(':')[0] || title}
+            </h3>
+            {title?.includes(':') && (
+              <div className="text-lg text-gray-600 mb-2">
+                {title.split(':')[1]?.trim()}
+              </div>
+            )}
+            {description && (
+              <div className="text-sm text-gray-500 mb-2">
+                {description}
+              </div>
+            )}
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 focus:outline-none cursor-pointer"
+            className="text-gray-500 hover:text-gray-700 focus:outline-none cursor-pointer ml-4"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -145,26 +158,10 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
             )}
           </div>
 
-          {/* Current segment info */}
+          {/* Segment info below video player */}
           {(startTime !== undefined || endTime !== undefined) && (
-            <div className="mt-3 text-xs text-gray-500">
-              <div className="font-medium text-gray-700 mb-1">
-                Segment: {Math.max(0, startTime ?? 0).toFixed(2)}s – {endTime?.toFixed(2) ?? 'End'}s
-              </div>
-              {Number.isFinite(currentTime) && (
-                <div className="text-gray-500">
-                  Current: {currentTime.toFixed(2)}s
-                  {startTime !== undefined && endTime !== undefined && (
-                    <span className={`ml-2 px-2 py-1 rounded text-xs ${
-                      currentTime >= startTime && currentTime <= endTime
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {currentTime >= startTime && currentTime <= endTime ? 'In Segment' : 'Out of Segment'}
-                    </span>
-                  )}
-                </div>
-              )}
+            <div className="mt-3 text-xs text-gray-400 text-center">
+              Segment: {Math.max(0, startTime ?? 0).toFixed(2)}s – {endTime?.toFixed(2) ?? 'End'}s
             </div>
           )}
         </div>
