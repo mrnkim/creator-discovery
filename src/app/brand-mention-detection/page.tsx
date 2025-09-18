@@ -49,6 +49,9 @@ export default function BrandMentionDetectionPage() {
   const [isEventsLoading, setIsEventsLoading] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEditingCreator, setIsEditingCreator] = useState<boolean>(false);
+  const [editingCreator, setEditingCreator] = useState<string>('');
+  const [isUpdatingCreator, setIsUpdatingCreator] = useState<boolean>(false);
 
   // Modal state
   const [modalVideo, setModalVideo] = useState<{
@@ -66,6 +69,7 @@ export default function BrandMentionDetectionPage() {
     const creators = new Set<string>();
     videos.forEach(video => {
       const creator = video.user_metadata?.creator ||
+                      video.user_metadata?.video_creator ||
                       video.user_metadata?.creator_id ||
                       'Unknown';
       creators.add(creator.toString());
@@ -108,11 +112,14 @@ export default function BrandMentionDetectionPage() {
   // Filtered videos based on selected filters
   const filteredVideos = useMemo(() => {
     return videos.filter(video => {
-      // Filter by creator
-      if (selectedCreators.length > 0) {
         const creator = video.user_metadata?.creator ||
+                      video.user_metadata?.video_creator ||
                         video.user_metadata?.creator_id ||
                         'Unknown';
+
+
+      // Filter by creator
+      if (selectedCreators.length > 0) {
         if (!selectedCreators.includes(creator.toString())) {
           return false;
         }
@@ -355,6 +362,59 @@ export default function BrandMentionDetectionPage() {
     }
   }
 
+  // Update creator for a video
+  async function updateVideoCreator(videoId: string, newCreator: string) {
+    if (!creatorIndexId) return;
+
+    setIsUpdatingCreator(true);
+    console.log(`🔄 Updating creator for video ${videoId} to: ${newCreator}`);
+
+    try {
+      const response = await axios.put('/api/videos/updateUserMetadata', {
+        videoId,
+        indexId: creatorIndexId,
+        user_metadata: {
+          creator: newCreator
+        }
+      });
+
+      if (response.data && response.data.success) {
+        // Update local state
+        setAnalysisByVideo(prevAnalysis => ({
+          ...prevAnalysis,
+          [videoId]: {
+            ...prevAnalysis[videoId],
+            creator: newCreator
+          }
+        }));
+
+        // Update videos array as well
+        setVideos(prevVideos =>
+          prevVideos.map(video =>
+            video._id === videoId
+              ? {
+                  ...video,
+                  user_metadata: {
+                    ...video.user_metadata,
+                    creator: newCreator
+                  }
+                }
+              : video
+          )
+        );
+
+        setIsEditingCreator(false);
+        setEditingCreator('');
+        console.log(`✅ Creator updated successfully for video ${videoId}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error updating creator for video ${videoId}:`, error);
+      setError(`Failed to update creator: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsUpdatingCreator(false);
+    }
+  }
+
   // (Removed) createEventBasedBuckets: not used
 
   // Handle cell click in heatmap
@@ -388,12 +448,12 @@ export default function BrandMentionDetectionPage() {
     if (duration <= 0) return;
 
     console.log('🔍 DEBUG: Emirates events analysis', {
-      rowId,
+        rowId,
       brandEvents: brandEvents.map((e, idx) => ({
         index: idx,
-        brand: e.brand,
-        start: e.timeline_start,
-        end: e.timeline_end,
+          brand: e.brand,
+          start: e.timeline_start,
+          end: e.timeline_end,
         duration: e.timeline_end - e.timeline_start,
         expectedBucket: Math.floor(e.timeline_start / (duration / NUM_BUCKETS)),
         expectedBucketEnd: Math.floor(e.timeline_end / (duration / NUM_BUCKETS))
@@ -594,8 +654,13 @@ export default function BrandMentionDetectionPage() {
       // map TwelveLabs rows to UI-friendly rows
       const uiRows = libraryRows.map(row => {
         const video = videos.find(v => v._id === row.video_id);
+        // Prioritize creator name, fallback to video title, then video ID
         const label = video ?
-          (video.user_metadata?.creator || video.system_metadata?.video_title || row.video_id) :
+          (video.user_metadata?.creator ||
+           video.user_metadata?.video_creator ||
+           video.user_metadata?.creator_id ||
+           video.system_metadata?.video_title ||
+           row.video_id) :
           row.video_id;
         return {
           id: row.video_id,
@@ -769,7 +834,162 @@ export default function BrandMentionDetectionPage() {
                 </div>
               )}
 
-              {/* Filters section */}
+              {/* Video title (per-video view) */}
+              {viewMode === 'per-video' && selectedVideoId && (
+                <div className="mb-4">
+                  <h2 className="text-2xl font-bold text-gray-800">
+                    {(() => {
+                      const video = videos.find(v => v._id === selectedVideoId);
+                      const filename = video?.system_metadata?.filename;
+                      const videoTitle = video?.system_metadata?.video_title;
+
+                      if (filename) {
+                        return filename.replace(/\.mp4$/i, '');
+                      } else if (videoTitle) {
+                        return videoTitle;
+                      } else {
+                        return `Video ${selectedVideoId}`;
+                      }
+                    })()}
+                  </h2>
+                </div>
+              )}
+
+              {/* Video info section (per-video view) or Filters section (library view) */}
+              {viewMode === 'per-video' && selectedVideoId ? (
+                <div className="mb-8 bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold mb-4">Video Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Video Styles */}
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Styles</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {analysisByVideo[selectedVideoId]?.styles && analysisByVideo[selectedVideoId].styles!.length > 0 ? (
+                          analysisByVideo[selectedVideoId].styles!.map((style: string, index: number) => (
+                            <span key={index} className="px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded-full">
+                              {style}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-gray-500">No styles detected</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Video Tones */}
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Tones</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {analysisByVideo[selectedVideoId]?.tones && analysisByVideo[selectedVideoId].tones!.length > 0 ? (
+                          analysisByVideo[selectedVideoId].tones!.map((tone: string, index: number) => (
+                            <span key={index} className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
+                              {tone}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-gray-500">No tones detected</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Creator */}
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Creator</h4>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        {isEditingCreator ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={editingCreator}
+                              onChange={(e) => setEditingCreator(e.target.value)}
+                              className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="Enter creator name"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => updateVideoCreator(selectedVideoId, editingCreator)}
+                              disabled={isUpdatingCreator || !editingCreator.trim()}
+                              className={clsx(
+                                'px-2 py-1 text-xs rounded',
+                                isUpdatingCreator || !editingCreator.trim()
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                  : 'bg-green-600 text-white hover:bg-green-700'
+                              )}
+                            >
+                              {isUpdatingCreator ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setIsEditingCreator(false);
+                                setEditingCreator('');
+                              }}
+                              className="px-2 py-1 text-xs bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            {analysisByVideo[selectedVideoId]?.creator ? (
+                              <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+                                {analysisByVideo[selectedVideoId].creator}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-500">Unknown</span>
+                            )}
+                            <button
+                              onClick={() => {
+                                setEditingCreator(analysisByVideo[selectedVideoId]?.creator || '');
+                                setIsEditingCreator(true);
+                              }}
+                              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                              title="Edit creator"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Brand filter for current video */}
+                  <div className="mt-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h4 className="text-sm font-medium">Filter Brands</h4>
+                      <button
+                        onClick={() => setSelectedBrands([])}
+                        className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                        title="Clear all brand filters"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+                      {availableBrands.filter(brand =>
+                        eventsByVideo[selectedVideoId]?.some(event => event.brand === brand)
+                      ).map(brand => (
+                        <button
+                          key={brand}
+                          onClick={() => toggleBrand(brand)}
+                          className={clsx(
+                            'px-2 py-1 text-xs rounded-full',
+                            selectedBrands.includes(brand)
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                          )}
+                        >
+                          {brand}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
               <div className="mb-8 bg-gray-50 p-4 rounded-lg">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-semibold">Filters</h3>
@@ -912,6 +1132,7 @@ export default function BrandMentionDetectionPage() {
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Heatmap visualization */}
               <div className="mb-8">
@@ -932,11 +1153,7 @@ export default function BrandMentionDetectionPage() {
                     <h3 className="text-lg font-semibold mb-4">
                       {viewMode === 'library'
                         ? `Brand Mention Heatmap (${heatmapData.length} videos)`
-                        : `Brand Mentions in ${
-                            videos.find(v => v._id === selectedVideoId)?.system_metadata?.video_title ||
-                            videos.find(v => v._id === selectedVideoId)?._id ||
-                            'Selected Video'
-                          }`
+                        : 'Brand Mentions'
                       }
                     </h3>
                     <div className="overflow-x-auto">
@@ -1008,9 +1225,13 @@ export default function BrandMentionDetectionPage() {
                           </h4>
                           <p className="text-xs text-gray-500 truncate">
                             Creator:{' '}
-                            {String(
-                              (video.user_metadata?.creator as string) ?? 'Unknown'
-                            )}
+                            {(() => {
+                              const creator = video.user_metadata?.creator ||
+                                              video.user_metadata?.video_creator ||
+                                              video.user_metadata?.creator_id ||
+                                              'Unknown';
+                              return String(creator);
+                            })()}
                           </p>
                           <p className="text-xs text-gray-500">
                             Duration: {Math.round(video.system_metadata?.duration || 0)}s
@@ -1036,11 +1257,6 @@ export default function BrandMentionDetectionPage() {
                                     </span>
                                   ))}
                                 </div>
-                              )}
-                              {analysisByVideo[video._id].creator && (
-                                <p className="text-xs text-green-600 font-medium">
-                                  Creator: {analysisByVideo[video._id].creator}
-                                </p>
                               )}
                             </div>
                           )}
