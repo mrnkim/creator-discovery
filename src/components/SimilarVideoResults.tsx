@@ -120,29 +120,88 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
   const renderTags = (videoData: VideoData | undefined) => {
     if (!videoData || !videoData.user_metadata) return null;
 
-    const allTags = Object.entries(videoData.user_metadata)
-      .filter(([key, value]) => key !== 'source' && value != null && value.toString().length > 0)
-      .flatMap(([, value]) => {
-        // Split comma-separated values
-        const tagValues = (value as unknown as string).toString().split(',');
+    try {
+      const allTags = Object.entries(videoData.user_metadata)
+      .filter(([key, value]) => {
+        // Filter out certain keys and null/undefined values
+        const excludeKeys = ['source', 'brand_product_events', 'analysis', 'brand_product_analyzed_at', 'brand_product_source'];
+        return !excludeKeys.includes(key) && value != null;
+      })
+      .flatMap(([key, value]) => {
+        // Handle different data types properly
+        let processedValue: string[] = [];
 
-        return tagValues
+        if (typeof value === 'string') {
+          // Check if it's a JSON string
+          if (value.startsWith('[') && value.endsWith(']')) {
+            try {
+              const parsedArray = JSON.parse(value);
+              if (Array.isArray(parsedArray)) {
+                processedValue = parsedArray
+                  .filter(item => typeof item === 'string' && item.trim().length > 0)
+                  .map(item => item.trim());
+              }
+            } catch {
+              console.warn('Failed to parse JSON array:', value);
+              // Fall back to treating as comma-separated string
+              processedValue = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
+            }
+          } else if (value.startsWith('{') && value.endsWith('}')) {
+            // Skip JSON objects - they're too complex for pills
+            return [];
+          } else {
+            // Regular string - split by commas
+            processedValue = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
+          }
+        } else if (typeof value === 'number' || typeof value === 'boolean') {
+          processedValue = [value.toString()];
+        } else if (Array.isArray(value)) {
+          // Handle arrays directly
+          processedValue = value
+            .filter(item => item != null)
+            .map(item => typeof item === 'string' ? item.trim() : String(item))
+            .filter(item => item.length > 0);
+        } else if (typeof value === 'object') {
+          // Skip complex objects that shouldn't be displayed as tags
+          return [];
+        } else {
+          processedValue = [String(value)];
+        }
+
+        // Skip if no valid values
+        if (processedValue.length === 0) {
+          return [];
+        }
+
+        return processedValue
           .map((tag: string) => {
-            // First trim the tag to remove any leading/trailing spaces
+            // Trim and validate each tag
             const trimmedTag = tag.trim();
-            if (trimmedTag.length === 0) return '';
+            if (trimmedTag.length === 0 || trimmedTag.length > 50) {
+              return ''; // Skip empty or overly long tags
+            }
 
             // Properly capitalize - first lowercase everything then capitalize first letter of each word
             const properlyCapitalized = trimmedTag
               .toLowerCase()
               .split(' ')
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+              .map((word: string) => {
+                if (word.length === 0) return word;
+                return word.charAt(0).toUpperCase() + word.slice(1);
+              })
               .join(' ');
 
             return properlyCapitalized;
           })
           .filter((tag: string) => tag !== '');
-      });
+      })
+      .filter(tag => tag.length > 0) // Remove any empty tags
+      .slice(0, 10); // Limit to 10 tags maximum to prevent UI overflow
+
+    // Return null if no valid tags found
+    if (allTags.length === 0) {
+      return null;
+    }
 
     return (
       <div className="mt-1 overflow-x-auto pb-1" style={{
@@ -153,8 +212,8 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
         <div className="flex gap-2 min-w-min">
           {allTags.map((tag, idx) => (
             <div
-              key={idx}
-              className="inline-block flex-shrink-0 bg-gray-100 border rounded-full px-3 py-1 text-xs whitespace-nowrap"
+              key={`${tag}-${idx}`}
+              className="inline-block flex-shrink-0 bg-gray-100 border rounded-full px-3 py-1 text-xs whitespace-nowrap text-gray-700 hover:bg-gray-200 transition-colors"
             >
               {tag}
             </div>
@@ -167,6 +226,14 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
         `}</style>
       </div>
     );
+    } catch (error) {
+      console.error('❌ Error rendering tags for video:', videoData?._id, error);
+      return (
+        <div className="mt-1 text-xs text-gray-400 italic">
+          Unable to load tags
+        </div>
+      );
+    }
   };
 
   const handleVideoClick = (videoId: string) => {
