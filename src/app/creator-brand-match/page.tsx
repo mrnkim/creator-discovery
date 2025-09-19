@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import {
   fetchVideos,
@@ -135,6 +135,29 @@ export default function CreatorBrandMatch({ description }: CreatorBrandMatchProp
     }
   };
 
+  // Helper function to determine match level
+  const getMatchLevel = (score: number, source?: string): 'High' | 'Medium' | 'Low' => {
+    // BOTH source results are always High
+    if (source === "BOTH") {
+      return "High";
+    }
+
+    // Single source cases based on score
+    if (score >= 1) return "High";
+    if (score >= 0.5) return "Medium";
+    return "Low";
+  };
+
+  // Helper function to get match level priority for sorting
+  const getMatchLevelPriority = (level: 'High' | 'Medium' | 'Low'): number => {
+    switch (level) {
+      case 'High': return 3;
+      case 'Medium': return 2;
+      case 'Low': return 1;
+      default: return 0;
+    }
+  };
+
   // Combine text and video search results with a boost for overlapping results
   const combineSearchResults = (
     textResults: EmbeddingSearchResult[],
@@ -186,9 +209,31 @@ export default function CreatorBrandMatch({ description }: CreatorBrandMatchProp
       }
     });
 
-    // Convert map to array and sort by score
-    return Array.from(resultMap.values()).sort((a, b) => b.score - a.score);
+    // Convert map to array and sort by match level (High, Medium, Low), then by score within each level
+    return Array.from(resultMap.values()).sort((a, b) => {
+      const levelA = getMatchLevel(a.score, a.originalSource);
+      const levelB = getMatchLevel(b.score, b.originalSource);
+
+      // First sort by match level priority (High > Medium > Low)
+      const levelPriorityA = getMatchLevelPriority(levelA);
+      const levelPriorityB = getMatchLevelPriority(levelB);
+
+      if (levelPriorityA !== levelPriorityB) {
+        return levelPriorityB - levelPriorityA; // Higher priority first
+      }
+
+      // If same level, sort by score (higher score first)
+      return b.score - a.score;
+    });
   };
+
+  // Auto-select first video when videos are loaded and sourceType is brand
+  useEffect(() => {
+    if (videosData?.pages?.[0]?.data?.[0] && sourceType === 'brand' && !selectedVideoId) {
+      const firstVideo = videosData.pages[0].data[0];
+      setSelectedVideoId(firstVideo._id);
+    }
+  }, [videosData, sourceType, selectedVideoId]);
 
   // Dismiss status messages
   const dismissMessage = () => {
