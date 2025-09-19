@@ -32,8 +32,12 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
   description,
 }) => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [isMuted, setIsMuted] = useState<boolean>(true); // Start muted by default
+  const [volume, setVolume] = useState<number>(1); // Volume state
+  const playerRef = useRef<ReactPlayer>(null);
   const [currentTime, setCurrentTime] = useState<number>(0);
+
+
 
   // Initialize isPlaying when modal opens
   useEffect(() => {
@@ -41,35 +45,71 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
       setIsPlaying(true);
     } else {
       setIsPlaying(false);
+      // Reset audio state when modal closes
+      setIsMuted(true);
+      setVolume(1);
     }
   }, [isOpen]);
+
+  // Handle muted state changes more carefully
+  useEffect(() => {
+    if (!isOpen || !playerRef.current) return;
+
+    // Add event listener to the actual video element for better mute detection
+    const addMuteListeners = () => {
+      const player = playerRef.current;
+      if (!player) return;
+
+      // Try to get the actual video element
+      const wrapper = player.wrapper;
+      if (wrapper) {
+        const videoElement = wrapper.querySelector('video') || wrapper.querySelector('hls-video');
+        if (videoElement) {
+          const handleVolumeChange = () => {
+            const currentMuted = videoElement.muted;
+
+            if (currentMuted !== isMuted) {
+              setIsMuted(currentMuted);
+            }
+          };
+
+          videoElement.addEventListener('volumechange', handleVolumeChange);
+
+          return () => {
+            videoElement.removeEventListener('volumechange', handleVolumeChange);
+          };
+        }
+      }
+    };
+
+    // Add listeners after a short delay to ensure the video element is ready
+    const timer = setTimeout(addMuteListeners, 500);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [isMuted, isOpen]);
 
   // Seek to startTime when metadata is available or when startTime changes
   useEffect(() => {
     if (!isOpen) return;
     if (startTime === undefined || startTime === null) return;
-    const el = videoRef.current;
-    if (!el) return;
+    const player = playerRef.current;
+    if (!player) return;
 
     const seekToStart = () => {
       try {
-        el.currentTime = Math.max(0, startTime);
+        player.seekTo(startTime, 'seconds');
       } catch (err) {
         console.error('Failed to seek to startTime', err);
       }
     };
 
-    if (el.readyState >= 1) {
-      seekToStart();
-    } else {
-      const onLoaded = () => {
-        seekToStart();
-        el.removeEventListener('loadedmetadata', onLoaded);
-      };
-      el.addEventListener('loadedmetadata', onLoaded);
-      return () => el.removeEventListener('loadedmetadata', onLoaded);
-    }
+    // Use a small delay to ensure the player is ready
+    const timer = setTimeout(seekToStart, 100);
+    return () => clearTimeout(timer);
   }, [isOpen, startTime, videoUrl]);
+
 
 
   if (!isOpen) return null;
@@ -113,17 +153,55 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
           <div className="relative w-full overflow-hidden rounded-[45.60px]" style={{ paddingTop: '56.25%' }}>
             {/* Player */}
             <ReactPlayer
-              ref={videoRef}
+              ref={playerRef}
               src={videoUrl}
               controls
               playing={isPlaying}
-              muted
+              muted={isMuted}
+              volume={volume}
               playsInline
               width="100%"
               height="100%"
               style={{ position: 'absolute', top: 0, left: 0 }}
+              onReady={() => {
+                // Player is ready
+              }}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
+              onVolumeChange={(e) => {
+                // Extract volume from event - it might be an event object or a number
+                let volumeValue;
+                let mutedValue;
+
+                if (typeof e === 'number') {
+                  volumeValue = e;
+                } else if (e && e.target) {
+                  volumeValue = typeof e.target.volume === 'number' ? e.target.volume : volume;
+                  mutedValue = typeof e.target.muted === 'boolean' ? e.target.muted : undefined;
+                } else if (e && typeof e.volume === 'number') {
+                  volumeValue = e.volume;
+                } else {
+                  return;
+                }
+
+                setVolume(volumeValue);
+
+                // Update muted state based on actual muted property if available
+                if (typeof mutedValue === 'boolean') {
+                  if (mutedValue !== isMuted) {
+                    setIsMuted(mutedValue);
+                  }
+                } else {
+                  // Fallback: detect mute/unmute based on volume changes
+                  if (volumeValue === 0 && !isMuted) {
+                    setIsMuted(true);
+                  } else if (volumeValue > 0 && isMuted) {
+                    setIsMuted(false);
+                  }
+                }
+              }}
+              onMute={() => setIsMuted(true)}
+              onUnmute={() => setIsMuted(false)}
               onTimeUpdate={(e) => {
                 const el = e.currentTarget as HTMLVideoElement;
                 setCurrentTime(el.currentTime);
@@ -140,6 +218,15 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
               }}
               onError={(error) => {
                 console.error('ReactPlayer error', error);
+              }}
+              config={{
+                file: {
+                  attributes: {
+                    crossOrigin: "anonymous",
+                    controlsList: "nodownload",
+                    playsInline: true,
+                  },
+                },
               }}
             />
 
