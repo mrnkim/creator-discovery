@@ -63,6 +63,9 @@ export default function SemanticSearchPage() {
     end?: number;
   } | null>(null);
 
+  // Ref to track if search was cleared
+  const searchClearedRef = useRef(false);
+
   // Default gallery state (videos shown when no search results)
   type DefaultVideoItem = VideoDetails & { index_id: string };
   const [defaultVideos, setDefaultVideos] = useState<DefaultVideoItem[]>([]);
@@ -118,6 +121,8 @@ export default function SemanticSearchPage() {
 
   // Clear search state
   const clearSearch = () => {
+    console.log('🔍 clearSearch called');
+    searchClearedRef.current = true; // Mark that search was cleared
     setSearchQuery('');
     setImageFile(null);
     setImageUrl('');
@@ -126,6 +131,7 @@ export default function SemanticSearchPage() {
     if (searchInputRef.current) {
       searchInputRef.current.value = '';
     }
+    console.log('🔍 clearSearch completed - searchResults should be empty');
   };
 
   // Fetch default videos for the selected scope (shown when no search results)
@@ -181,6 +187,8 @@ export default function SemanticSearchPage() {
   const handleTextSearch = async () => {
     if (!searchQuery.trim()) return;
 
+    console.log('🔍 handleTextSearch called with query:', searchQuery);
+    searchClearedRef.current = false; // Reset the cleared flag
     setIsSearching(true);
     setSearchResults([]);
 
@@ -192,6 +200,7 @@ export default function SemanticSearchPage() {
       });
 
       if (response.data && response.data.data) {
+        console.log('🔍 Search response received, setting searchResults:', response.data.data.length, 'items');
         setSearchResults(response.data.data);
         fetchVideoDetailsForResults(response.data.data);
       }
@@ -234,6 +243,7 @@ export default function SemanticSearchPage() {
 
   // Fetch video details for search results
   const fetchVideoDetailsForResults = async (results: SearchResult[]) => {
+    console.log('🔍 fetchVideoDetailsForResults called with', results.length, 'results');
     try {
       const updatedResults = await Promise.all(
         results.map(async (result) => {
@@ -257,6 +267,13 @@ export default function SemanticSearchPage() {
         })
       );
 
+      // Check if search was cleared while we were fetching details
+      if (searchClearedRef.current) {
+        console.log('🔍 Search was cleared while fetching details, skipping update');
+        return;
+      }
+
+      console.log('🔍 fetchVideoDetailsForResults completed, updating searchResults with', updatedResults.length, 'items');
       setSearchResults(updatedResults);
     } catch (error) {
       console.error('Error fetching video details:', error);
@@ -500,6 +517,17 @@ export default function SemanticSearchPage() {
                     if (e.key === 'Enter') handleTextSearch();
                   }}
                 />
+                {/* Clear search button */}
+                {searchQuery && (
+                  <button
+                    onClick={clearSearch}
+                    className="absolute right-20 p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
                 <button
                   onClick={handleTextSearch}
                   disabled={isSearching || !searchQuery.trim()}
@@ -634,12 +662,6 @@ export default function SemanticSearchPage() {
                 <h2 className="text-xl font-semibold">
                   Search Results ({filteredResults.length})
                 </h2>
-                <button
-                  onClick={clearSearch}
-                  className="text-sm text-gray-600 hover:text-gray-800"
-                >
-                  Clear Results
-                </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
