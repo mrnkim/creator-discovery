@@ -1,11 +1,15 @@
 import axios from 'axios';
-import { 
-  VideoPage, 
-  VideoData, 
-  PaginatedResponse, 
+import {
+  VideoPage,
+  VideoData,
+  PaginatedResponse,
   EmbeddingSearchResult,
   EmbeddingCheckResult
 } from '@/types';
+
+// Cache for vector existence checks to avoid repeated API calls
+const vectorExistenceCache = new Map<string, { exists: boolean; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Fetches videos from the API with pagination
@@ -15,7 +19,7 @@ import {
  * @returns Promise with paginated video data
  */
 export async function fetchVideos(
-  page: number = 1, 
+  page: number = 1,
   indexId: string,
   limit: number = 12
 ): Promise<VideoPage> {
@@ -80,14 +84,31 @@ export async function checkVideoVectorsExist(
   videoId: string,
   indexId: string
 ): Promise<boolean> {
+  const cacheKey = `${videoId}-${indexId}`;
+  const now = Date.now();
+
+  // Check cache first
+  const cached = vectorExistenceCache.get(cacheKey);
+  if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+    console.log(`🎯 Cache hit for vector existence: ${videoId}`);
+    return cached.exists;
+  }
+
   try {
+    console.log(`🔍 Checking vector existence: ${videoId}`);
     const response = await axios.get('/api/vectors/exists', {
       params: {
         video_id: videoId,
         index_id: indexId
       }
     });
-    return response.data.exists;
+
+    const exists = response.data.exists;
+
+    // Cache the result
+    vectorExistenceCache.set(cacheKey, { exists, timestamp: now });
+
+    return exists;
   } catch (error) {
     console.error(`Error checking vectors for ${videoId}:`, error);
     return false;
@@ -141,11 +162,11 @@ export async function checkAndEnsureEmbeddings(
   try {
     // Check if source video has vectors
     const sourceVectorsExist = await checkVideoVectorsExist(videoId, sourceIndexId);
-    
+
     if (!sourceVectorsExist) {
       // Fetch video with embeddings
       const videoWithEmbedding = await fetchVideoDetails(videoId, sourceIndexId, true);
-      
+
       if (!videoWithEmbedding.embedding?.video_embedding?.segments) {
         return {
           success: false,
@@ -154,15 +175,15 @@ export async function checkAndEnsureEmbeddings(
           message: `Failed to get embedding for source video ${videoId}`
         };
       }
-      
+
       // Store vectors
-      const videoName = videoWithEmbedding.system_metadata?.filename || 
-                        videoWithEmbedding.system_metadata?.video_title || 
+      const videoName = videoWithEmbedding.system_metadata?.filename ||
+                        videoWithEmbedding.system_metadata?.video_title ||
                         `video_${videoId}`;
-      
+
       await storeVectors(videoId, videoName, videoWithEmbedding.embedding, sourceIndexId);
     }
-    
+
     // If we don't need to process target videos, return early
     if (!processTargets || targetVideos.length === 0) {
       return {
@@ -171,41 +192,68 @@ export async function checkAndEnsureEmbeddings(
         totalCount: 1
       };
     }
-    
-    // Process target videos with concurrency limit
-    const MAX_CONCURRENT = 3;
+
+    // Process target videos with improved concurrency and batching
+    const MAX_CONCURRENT = 5; // Increased concurrency
     let processedCount = 0;
     const totalCount = targetVideos.length;
-    
-    // Process videos in batches to limit concurrency
+
+    console.log(`🚀 Processing ${totalCount} target videos with concurrency limit: ${MAX_CONCURRENT}`);
+
+    // First, check which videos need embedding processing
+    const videosToProcess: VideoData[] = [];
+
+    // Batch check vector existence for all videos
     for (let i = 0; i < targetVideos.length; i += MAX_CONCURRENT) {
       const batch = targetVideos.slice(i, i + MAX_CONCURRENT);
-      
+
+      const existenceChecks = await Promise.all(
+        batch.map(async (video) => {
+          const targetVideoId = video._id;
+          const exists = await checkVideoVectorsExist(targetVideoId, targetIndexId);
+          return { video, exists };
+        })
+      );
+
+      // Collect videos that need processing
+      existenceChecks.forEach(({ video, exists }) => {
+        if (!exists) {
+          videosToProcess.push(video);
+        }
+        processedCount++;
+      });
+    }
+
+    console.log(`📊 Found ${videosToProcess.length} videos that need embedding processing`);
+
+    // Process videos that need embeddings
+    for (let i = 0; i < videosToProcess.length; i += MAX_CONCURRENT) {
+      const batch = videosToProcess.slice(i, i + MAX_CONCURRENT);
+
       await Promise.all(batch.map(async (video) => {
         try {
           const targetVideoId = video._id;
-          const targetVectorsExist = await checkVideoVectorsExist(targetVideoId, targetIndexId);
-          
-          if (!targetVectorsExist) {
-            // Fetch video with embeddings
-            const videoWithEmbedding = await fetchVideoDetails(targetVideoId, targetIndexId, true);
-            
-            if (videoWithEmbedding.embedding?.video_embedding?.segments) {
-              const videoName = videoWithEmbedding.system_metadata?.filename || 
-                              videoWithEmbedding.system_metadata?.video_title || 
-                              `video_${targetVideoId}`;
-              
-              await storeVectors(targetVideoId, videoName, videoWithEmbedding.embedding, targetIndexId);
-            }
+          console.log(`🔄 Processing embedding for video: ${targetVideoId}`);
+
+          // Fetch video with embeddings
+          const videoWithEmbedding = await fetchVideoDetails(targetVideoId, targetIndexId, true);
+
+          if (videoWithEmbedding.embedding?.video_embedding?.segments) {
+            const videoName = videoWithEmbedding.system_metadata?.filename ||
+                            videoWithEmbedding.system_metadata?.video_title ||
+                            `video_${targetVideoId}`;
+
+            await storeVectors(targetVideoId, videoName, videoWithEmbedding.embedding, targetIndexId);
+            console.log(`✅ Successfully processed embedding for video: ${targetVideoId}`);
+          } else {
+            console.warn(`⚠️ No embedding data found for video: ${targetVideoId}`);
           }
-          
-          processedCount++;
         } catch (error) {
-          console.error(`Error processing target video:`, error);
+          console.error(`❌ Error processing target video ${video._id}:`, error);
         }
       }));
     }
-    
+
     return {
       success: true,
       processedCount,
@@ -237,38 +285,38 @@ export async function textToVideoEmbeddingSearch(
   try {
     // Get video details to derive search term
     const videoDetails = await fetchVideoDetails(selectedVideoId, sourceIndexId);
-    
+
     // Derive search term from video details
     let searchTerm = '';
-    
+
     // Try to get meaningful text from the video metadata
     if (videoDetails.user_metadata) {
       // Check for descriptive fields in user metadata
       const metadataValues = Object.values(videoDetails.user_metadata)
         .filter(value => typeof value === 'string' && value.length > 0);
-      
+
       if (metadataValues.length > 0) {
         // Join the first few metadata values
         searchTerm = metadataValues.slice(0, 3).join(' ');
       }
     }
-    
+
     // If no user metadata, fall back to system metadata
     if (!searchTerm && videoDetails.system_metadata) {
-      searchTerm = videoDetails.system_metadata.video_title || 
-                  videoDetails.system_metadata.filename || 
+      searchTerm = videoDetails.system_metadata.video_title ||
+                  videoDetails.system_metadata.filename ||
                   `Video ${selectedVideoId}`;
     }
-    
+
     // Remove file extensions if present
     searchTerm = searchTerm.replace(/\.[^/.]+$/, '');
-    
+
     // Perform the search
     const response = await axios.post<EmbeddingSearchResult[]>('/api/embeddingSearch/textToVideo', {
       searchTerm,
       indexId: targetIndexId
     });
-    
+
     return response.data;
   } catch (error) {
     console.error('Error in text-to-video search:', error);
@@ -293,7 +341,7 @@ export async function videoToVideoEmbeddingSearch(
       videoId: selectedVideoId,
       indexId: targetIndexId
     });
-    
+
     return response.data;
   } catch (error) {
     console.error('Error in video-to-video search:', error);

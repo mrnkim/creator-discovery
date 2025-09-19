@@ -19,33 +19,45 @@ export async function POST(req: Request) {
     const { videoId, indexId } = await req.json();
     const index = getPineconeIndex();
 
-    // First, get the original video's clip embedding
+    // First, get the original video's clip embedding (limit to top clips for performance)
     const originalClipQuery = await index.query({
       filter: {
         tl_video_id: videoId,
         scope: 'clip'
       },
-      topK: 100,
+      topK: 10, // Reduced from 100 to 10 for better performance
       includeMetadata: true,
       includeValues: true,
       vector: new Array(1024).fill(0)
     });
 
+    console.log(`🔍 Found ${originalClipQuery.matches.length} clips for video ${videoId}`);
+
     // If we found matching clips, search for similar videos for each match
     const similarResults = [];
     if (originalClipQuery.matches.length > 0) {
-      for (const originalClip of originalClipQuery.matches) {
-        const vectorValues = originalClip.values || new Array(1024).fill(0);
-        const queryResult = await index.query({
-          vector: vectorValues,
-          filter: {
-            tl_index_id: indexId,
-            scope: 'clip'
-          },
-          topK: 5,
-          includeMetadata: true,
-        });
-        similarResults.push(queryResult);
+      // Process clips in parallel with concurrency limit
+      const MAX_CONCURRENT_CLIPS = 3;
+
+      for (let i = 0; i < originalClipQuery.matches.length; i += MAX_CONCURRENT_CLIPS) {
+        const clipBatch = originalClipQuery.matches.slice(i, i + MAX_CONCURRENT_CLIPS);
+
+        const batchResults = await Promise.all(
+          clipBatch.map(async (originalClip) => {
+            const vectorValues = originalClip.values || new Array(1024).fill(0);
+            return await index.query({
+              vector: vectorValues,
+              filter: {
+                tl_index_id: indexId,
+                scope: 'clip'
+              },
+              topK: 5,
+              includeMetadata: true,
+            });
+          })
+        );
+
+        similarResults.push(...batchResults);
       }
     }
 
@@ -75,7 +87,7 @@ export async function POST(req: Request) {
         return acc;
       }, {})
     );
-    
+
     // Sort by score
     const sortedResults = uniqueResults.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 

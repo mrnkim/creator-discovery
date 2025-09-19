@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   fetchVideos,
   textToVideoEmbeddingSearch,
@@ -57,19 +57,31 @@ export default function CreatorBrandMatch({ description }: CreatorBrandMatchProp
     },
     initialPageParam: 1,
     enabled: !!sourceIndexId,
+    staleTime: 2 * 60 * 1000, // 2 minutes - videos don't change often
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false, // Don't refetch when window regains focus
+    refetchOnMount: false, // Don't refetch on component mount if data exists
   });
 
-  // Fetch target videos for embedding preparation
-  const fetchTargetVideos = async () => {
-    try {
-      const response = await fetchVideos(1, targetIndexId, 20);
-      setTargetVideos(response.data);
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching target videos:', error);
-      return [];
+  // Fetch target videos for embedding preparation using React Query
+  const {
+    data: targetVideosData,
+  } = useQuery({
+    queryKey: ['targetVideos', targetIndexId],
+    queryFn: () => fetchVideos(1, targetIndexId, 20),
+    enabled: !!targetIndexId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 15 * 60 * 1000, // 15 minutes
+    refetchOnWindowFocus: false,
+    select: (data) => data.data, // Extract just the data array
+  });
+
+  // Update targetVideos state when data is available
+  useEffect(() => {
+    if (targetVideosData) {
+      setTargetVideos(targetVideosData);
     }
-  };
+  }, [targetVideosData]);
 
   // Handle source type toggle
   const handleSourceTypeToggle = () => {
@@ -94,13 +106,17 @@ export default function CreatorBrandMatch({ description }: CreatorBrandMatchProp
     setSimilarResults([]);
 
     try {
-      // Fetch target videos if not already fetched
-      const targetVideosToProcess = targetVideos.length > 0 ? targetVideos : await fetchTargetVideos();
+      // Use target videos from React Query cache
+      const targetVideosToProcess = targetVideos.length > 0 ? targetVideos : [];
+
+      console.log(`🎯 Starting match finding for video: ${selectedVideoId}`);
+      console.log(`📊 Processing ${targetVideosToProcess.length} target videos`);
 
       // Check and ensure embeddings for source and target videos
       setIsLoadingEmbeddings(true);
       setIsProcessingTargetEmbeddings(true);
 
+      const startTime = Date.now();
       const embeddingResult = await checkAndEnsureEmbeddings(
         selectedVideoId,
         sourceIndexId,
@@ -108,6 +124,9 @@ export default function CreatorBrandMatch({ description }: CreatorBrandMatchProp
         targetVideosToProcess,
         true
       );
+      const embeddingTime = Date.now() - startTime;
+
+      console.log(`⏱️ Embedding processing took: ${embeddingTime}ms`);
 
       setTargetEmbeddingsProgress({
         processed: embeddingResult.processedCount,
@@ -118,18 +137,30 @@ export default function CreatorBrandMatch({ description }: CreatorBrandMatchProp
       setIsLoadingEmbeddings(false);
       setIsProcessingTargetEmbeddings(false);
 
-      // Run text-to-video search
-      const textResults = await textToVideoEmbeddingSearch(selectedVideoId, sourceIndexId, targetIndexId);
+      if (!embeddingResult.success) {
+        console.error('❌ Embedding processing failed');
+        return;
+      }
 
-      // Run video-to-video search
-      const videoResults = await videoToVideoEmbeddingSearch(selectedVideoId, sourceIndexId, targetIndexId);
+      // Run searches in parallel for better performance
+      console.log('🔍 Starting parallel searches...');
+      const searchStartTime = Date.now();
+
+      const [textResults, videoResults] = await Promise.all([
+        textToVideoEmbeddingSearch(selectedVideoId, sourceIndexId, targetIndexId),
+        videoToVideoEmbeddingSearch(selectedVideoId, sourceIndexId, targetIndexId)
+      ]);
+
+      const searchTime = Date.now() - searchStartTime;
+      console.log(`⏱️ Search processing took: ${searchTime}ms`);
 
       // Combine results with a boost for videos that appear in both searches
       const combinedResults = combineSearchResults(textResults, videoResults);
 
+      console.log(`✅ Found ${combinedResults.length} total matches`);
       setSimilarResults(combinedResults);
     } catch (error) {
-      console.error('Error finding matches:', error);
+      console.error('❌ Error finding matches:', error);
     } finally {
       setIsAnalyzing(false);
     }
