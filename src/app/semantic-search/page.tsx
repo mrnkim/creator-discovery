@@ -58,6 +58,7 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
   const [searchScope, setSearchScope] = useState<SearchScope>('all');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false); // Track if a search has been performed
   const [activeFilters, setActiveFilters] = useState<FacetFilter[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<{
     videoId: string;
@@ -132,6 +133,7 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
     setImageUrl('');
     setImageSrc('');
     setSearchResults([]);
+    setHasSearched(false); // Reset search state
     if (searchInputRef.current) {
       searchInputRef.current.value = '';
     }
@@ -195,6 +197,7 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
     searchClearedRef.current = false; // Reset the cleared flag
     setIsSearching(true);
     setSearchResults([]);
+    setHasSearched(true); // Mark that a search has been performed
 
     try {
       const response = await axios.post('/api/search/text', {
@@ -221,6 +224,7 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
 
     setIsSearching(true);
     setSearchResults([]);
+    setHasSearched(true); // Mark that a search has been performed
 
     try {
       const formData = new FormData();
@@ -382,6 +386,7 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
       // Automatically search with the cropped image
       setIsSearching(true);
       setSearchResults([]);
+      setHasSearched(true); // Mark that a search has been performed
 
       try {
         const formData = new FormData();
@@ -734,6 +739,14 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
                   </div>
                 ))}
               </div>
+            </div>
+          ) : hasSearched ? (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <p className="text-lg font-medium mb-2">No search results found</p>
+              <p className="text-sm text-gray-400">Try adjusting your search criteria or scope</p>
             </div>
           ) : (
             <div>
