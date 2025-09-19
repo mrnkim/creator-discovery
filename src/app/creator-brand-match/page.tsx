@@ -258,13 +258,13 @@ export default function CreatorBrandMatch({ description }: CreatorBrandMatchProp
     });
   };
 
-  // Auto-select first video when videos are loaded and sourceType is brand
+  // Auto-select first video when videos are loaded (for both brand and creator)
   useEffect(() => {
-    if (videosData?.pages?.[0]?.data?.[0] && sourceType === 'brand' && !selectedVideoId) {
+    if (videosData?.pages?.[0]?.data?.[0] && !selectedVideoId) {
       const firstVideo = videosData.pages[0].data[0];
       setSelectedVideoId(firstVideo._id);
     }
-  }, [videosData, sourceType, selectedVideoId]);
+  }, [videosData, selectedVideoId]);
 
   // Dismiss status messages
   const dismissMessage = () => {
