@@ -63,6 +63,15 @@ export default function SemanticSearchPage() {
     end?: number;
   } | null>(null);
 
+  // Default gallery state (videos shown when no search results)
+  type DefaultVideoItem = VideoDetails & { index_id: string };
+  const [defaultVideos, setDefaultVideos] = useState<DefaultVideoItem[]>([]);
+  const [isLoadingDefault, setIsLoadingDefault] = useState<boolean>(false);
+  const [defaultError, setDefaultError] = useState<string | null>(null);
+
+  const brandIndexId = process.env.NEXT_PUBLIC_BRAND_INDEX_ID as string | undefined;
+  const creatorIndexId = process.env.NEXT_PUBLIC_CREATOR_INDEX_ID as string | undefined;
+
   // Image search state
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string>('');
@@ -119,20 +128,69 @@ export default function SemanticSearchPage() {
     }
   };
 
+  // Fetch default videos for the selected scope (shown when no search results)
+  const fetchDefaultVideos = async (scope: SearchScope) => {
+    try {
+      setIsLoadingDefault(true);
+      setDefaultError(null);
+      setDefaultVideos([]);
+
+      if (!brandIndexId || !creatorIndexId) {
+        setDefaultError('Missing index configuration');
+        return;
+      }
+
+      if (scope === 'brand') {
+        const { data } = await axios.get('/api/videos', {
+          params: { index_id: brandIndexId, limit: 24, page: 1 }
+        });
+        const items: DefaultVideoItem[] = (data?.data || []).map((v: VideoDetails) => ({ ...v, index_id: brandIndexId }));
+        setDefaultVideos(items);
+        return;
+      }
+
+      if (scope === 'creator') {
+        const { data } = await axios.get('/api/videos', {
+          params: { index_id: creatorIndexId, limit: 24, page: 1 }
+        });
+        const items: DefaultVideoItem[] = (data?.data || []).map((v: VideoDetails) => ({ ...v, index_id: creatorIndexId }));
+        setDefaultVideos(items);
+        return;
+      }
+
+      // scope === 'all' → fetch both in parallel and merge
+      const [brandRes, creatorRes] = await Promise.all([
+        axios.get('/api/videos', { params: { index_id: brandIndexId, limit: 12, page: 1 } }),
+        axios.get('/api/videos', { params: { index_id: creatorIndexId, limit: 12, page: 1 } })
+      ]);
+
+      const brandItems: DefaultVideoItem[] = (brandRes.data?.data || []).map((v: VideoDetails) => ({ ...v, index_id: brandIndexId }));
+      const creatorItems: DefaultVideoItem[] = (creatorRes.data?.data || []).map((v: VideoDetails) => ({ ...v, index_id: creatorIndexId }));
+
+      // Merge without additional sorting to preserve API order
+      setDefaultVideos([...brandItems, ...creatorItems]);
+    } catch (error) {
+      console.error('Error fetching default videos:', error);
+      setDefaultError('Failed to load videos');
+    } finally {
+      setIsLoadingDefault(false);
+    }
+  };
+
   // Handle text search
   const handleTextSearch = async () => {
     if (!searchQuery.trim()) return;
-    
+
     setIsSearching(true);
     setSearchResults([]);
-    
+
     try {
       const response = await axios.post('/api/search/text', {
         query: searchQuery,
         scope: searchScope,
         page_limit: 24
       });
-      
+
       if (response.data && response.data.data) {
         setSearchResults(response.data.data);
         fetchVideoDetailsForResults(response.data.data);
@@ -147,22 +205,22 @@ export default function SemanticSearchPage() {
   // Handle image search
   const handleImageSearch = async () => {
     if (!imageFile && !imageUrl) return;
-    
+
     setIsSearching(true);
     setSearchResults([]);
-    
+
     try {
       const formData = new FormData();
       formData.append('scope', searchScope);
-      
+
       if (imageFile) {
         formData.append('file', imageFile);
       } else if (imageUrl) {
         formData.append('query', imageUrl);
       }
-      
+
       const response = await axios.post('/api/search/image', formData);
-      
+
       if (response.data && response.data.data) {
         setSearchResults(response.data.data);
         fetchVideoDetailsForResults(response.data.data);
@@ -182,15 +240,15 @@ export default function SemanticSearchPage() {
           try {
             const indexId = result.index_id;
             const videoDetails = await fetchVideoDetails(result.video_id, indexId);
-            
+
             // Determine format based on width and height
             let format: 'vertical' | 'horizontal' | undefined;
             if (videoDetails.system_metadata?.width && videoDetails.system_metadata?.height) {
-              format = videoDetails.system_metadata.width >= videoDetails.system_metadata.height 
-                ? 'horizontal' 
+              format = videoDetails.system_metadata.width >= videoDetails.system_metadata.height
+                ? 'horizontal'
                 : 'vertical';
             }
-            
+
             return { ...result, videoDetails, format };
           } catch (error) {
             console.error(`Error fetching details for video ${result.video_id}:`, error);
@@ -198,7 +256,7 @@ export default function SemanticSearchPage() {
           }
         })
       );
-      
+
       setSearchResults(updatedResults);
     } catch (error) {
       console.error('Error fetching video details:', error);
@@ -218,7 +276,7 @@ export default function SemanticSearchPage() {
   // Filter results based on active filters
   const filteredResults = searchResults.filter(result => {
     if (activeFilters.length === 0) return true;
-    
+
     // Narrow activeFilters into specific typed arrays using type predicates
     const categoryFilters = activeFilters.filter(
       (f): f is CategoryFilter => f === 'brand' || f === 'creator'
@@ -226,19 +284,19 @@ export default function SemanticSearchPage() {
     const formatFilters = activeFilters.filter(
       (f): f is FormatFilter => f === 'vertical' || f === 'horizontal'
     );
-    
+
     let passesCategory = true;
     let passesFormat = true;
-    
+
     if (categoryFilters.length > 0) {
-      const category = result.index_id.toLowerCase().includes('brand') ? 'brand' : 'creator';
+      const category = result.index_id === brandIndexId ? 'brand' : 'creator';
       passesCategory = categoryFilters.includes(category);
     }
-    
+
     if (formatFilters.length > 0 && result.format) {
       passesFormat = formatFilters.includes(result.format);
     }
-    
+
     return passesCategory && passesFormat;
   });
 
@@ -299,18 +357,18 @@ export default function SemanticSearchPage() {
       setImageFile(croppedFile);
       setIsCropModalOpen(false);
       setImageSrc(URL.createObjectURL(croppedFile));
-      
+
       // Automatically search with the cropped image
       setIsSearching(true);
       setSearchResults([]);
-      
+
       try {
         const formData = new FormData();
         formData.append('scope', searchScope);
         formData.append('file', croppedFile);
-        
+
         const response = await axios.post('/api/search/image', formData);
-        
+
         if (response.data && response.data.data) {
           setSearchResults(response.data.data);
           fetchVideoDetailsForResults(response.data.data);
@@ -326,7 +384,7 @@ export default function SemanticSearchPage() {
   // Handle URL input for image search
   const handleImageUrlInput = () => {
     if (!imageUrl) return;
-    
+
     setImageFile(null);
     setImageSrc(`/api/proxy-image?url=${encodeURIComponent(imageUrl)}`);
     setIsCropModalOpen(true);
@@ -336,15 +394,25 @@ export default function SemanticSearchPage() {
   // Open video modal
   const openVideoModal = (result: SearchResult) => {
     if (!result.videoDetails?.hls?.video_url) return;
-    
+
     setSelectedVideo({
       videoId: result.video_id,
       videoUrl: result.videoDetails.hls.video_url,
-      title: result.videoDetails.system_metadata?.filename || 
-             result.videoDetails.system_metadata?.video_title || 
+      title: result.videoDetails.system_metadata?.filename ||
+             result.videoDetails.system_metadata?.video_title ||
              `Video ${result.video_id}`,
       start: result.start,
       end: result.end
+    });
+  };
+
+  // Open video modal for default gallery videos
+  const openDefaultVideoModal = (video: DefaultVideoItem) => {
+    if (!video?.hls?.video_url) return;
+    setSelectedVideo({
+      videoId: video._id,
+      videoUrl: video.hls.video_url,
+      title: video.system_metadata?.filename || video.system_metadata?.video_title || `Video ${video._id}`,
     });
   };
 
@@ -368,6 +436,12 @@ export default function SemanticSearchPage() {
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Load default videos on scope change (and initial load)
+  React.useEffect(() => {
+    fetchDefaultVideos(searchScope);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchScope]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -548,7 +622,7 @@ export default function SemanticSearchPage() {
           </div>
         )}
 
-        {/* Search Results */}
+        {/* Search Results or Default Gallery */}
         <ErrorBoundary FallbackComponent={ErrorFallback}>
           {isSearching ? (
             <div className="flex justify-center items-center h-64">
@@ -567,22 +641,22 @@ export default function SemanticSearchPage() {
                   Clear Results
                 </button>
               </div>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {filteredResults.map((result, index) => (
-                  <div 
+                  <div
                     key={`${result.video_id}-${result.start}-${index}`}
                     className="relative rounded-lg overflow-hidden shadow-md cursor-pointer transform transition hover:scale-[1.02]"
                     onClick={() => openVideoModal(result)}
                   >
                     {/* Thumbnail */}
                     <div className="relative aspect-video">
-                      <img 
-                        src={result.thumbnail_url} 
-                        alt="Video thumbnail" 
+                      <img
+                        src={result.thumbnail_url}
+                        alt="Video thumbnail"
                         className="w-full h-full object-cover"
                       />
-                      
+
                       {/* Confidence Badge */}
                       <div className="absolute top-2 left-2">
                         <span className={clsx(
@@ -592,24 +666,24 @@ export default function SemanticSearchPage() {
                           {result.confidence}
                         </span>
                       </div>
-                      
+
                       {/* Index Badge */}
                       <div className="absolute top-2 right-2">
                         <span className={clsx(
                           'px-2 py-1 text-xs font-bold text-white rounded-md',
-                          result.index_id.toLowerCase().includes('brand') ? 'bg-purple-600' : 'bg-green-600'
+                          result.index_id === brandIndexId ? 'bg-purple-600' : 'bg-green-600'
                         )}>
-                          {result.index_id.toLowerCase().includes('brand') ? 'Brand' : 'Creator'}
+                          {result.index_id === brandIndexId ? 'Brand' : 'Creator'}
                         </span>
                       </div>
-                      
+
                       {/* Time Range */}
                       <div className="absolute bottom-2 right-2">
                         <span className="px-2 py-1 text-xs font-bold text-white bg-black bg-opacity-60 rounded-md">
                           {formatTime(result.start)} - {formatTime(result.end)}
                         </span>
                       </div>
-                      
+
                       {/* Format Badge (if available) */}
                       {result.format && (
                         <div className="absolute bottom-2 left-2">
@@ -621,12 +695,12 @@ export default function SemanticSearchPage() {
                         </div>
                       )}
                     </div>
-                    
+
                     {/* Title */}
                     <div className="p-2">
                       <h3 className="text-sm font-medium truncate">
-                        {result.videoDetails?.system_metadata?.filename || 
-                         result.videoDetails?.system_metadata?.video_title || 
+                        {result.videoDetails?.system_metadata?.filename ||
+                         result.videoDetails?.system_metadata?.video_title ||
                          `Video ${result.video_id}`}
                       </h3>
                     </div>
@@ -635,11 +709,76 @@ export default function SemanticSearchPage() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <p>Search for videos using text or images</p>
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">
+                  {searchScope === 'all' ? 'All Videos' : searchScope === 'brand' ? 'Brand Videos' : 'Creator Videos'} ({defaultVideos.length})
+                </h2>
+                <button
+                  onClick={() => fetchDefaultVideos(searchScope)}
+                  className="text-sm text-gray-600 hover:text-gray-800"
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {isLoadingDefault ? (
+                <div className="flex justify-center items-center h-64">
+                  <LoadingSpinner size="lg" />
+                </div>
+              ) : defaultError ? (
+                <div className="flex justify-center items-center h-32 text-red-600 text-sm">{defaultError}</div>
+              ) : defaultVideos.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <p>No videos to display</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {defaultVideos.map((video) => (
+                    <div
+                      key={`${video._id}-${video.index_id}`}
+                      className="relative rounded-lg overflow-hidden shadow-md cursor-pointer transform transition hover:scale-[1.02]"
+                      onClick={() => openDefaultVideoModal(video)}
+                    >
+                      {/* Thumbnail */}
+                      <div className="relative aspect-video">
+                        <img
+                          src={video.hls?.thumbnail_urls?.[0] || '/videoFallback.jpg'}
+                          alt="Video thumbnail"
+                          className="w-full h-full object-cover"
+                        />
+
+                        {/* Index Badge */}
+                        <div className="absolute top-2 right-2">
+                          <span className={clsx(
+                            'px-2 py-1 text-xs font-bold text-white rounded-md',
+                            video.index_id === brandIndexId ? 'bg-purple-600' : 'bg-green-600'
+                          )}>
+                            {video.index_id === brandIndexId ? 'Brand' : 'Creator'}
+                          </span>
+                        </div>
+
+                        {/* Duration */}
+                        <div className="absolute bottom-2 right-2">
+                          <span className="px-2 py-1 text-xs font-bold text-white bg-black bg-opacity-60 rounded-md">
+                            {formatTime(Math.floor(video.system_metadata?.duration || 0))}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Title */}
+                      <div className="p-2">
+                        <h3 className="text-sm font-medium truncate">
+                          {video.system_metadata?.filename || video.system_metadata?.video_title || `Video ${video._id}`}
+                        </h3>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </ErrorBoundary>
@@ -660,15 +799,15 @@ export default function SemanticSearchPage() {
                 </svg>
               </button>
             </div>
-            
+
             {imageError && (
               <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md">
                 {imageError}
               </div>
             )}
-            
-            <div 
-              {...getRootProps()} 
+
+            <div
+              {...getRootProps()}
               className={clsx(
                 'border-2 border-dashed rounded-lg p-6 mb-4 flex flex-col items-center justify-center cursor-pointer',
                 isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300',
@@ -685,7 +824,7 @@ export default function SemanticSearchPage() {
                 Supported formats: JPG, PNG (max 5MB)
               </p>
             </div>
-            
+
             <div className="mb-4">
               <p className="text-sm text-gray-600 mb-2">Or enter an image URL:</p>
               <div className="flex">
@@ -729,7 +868,7 @@ export default function SemanticSearchPage() {
                 </svg>
               </button>
             </div>
-            
+
             <div className="mb-4 bg-gray-100 p-2 rounded-lg">
               <ReactCrop
                 crop={crop}
@@ -746,7 +885,7 @@ export default function SemanticSearchPage() {
                 />
               </ReactCrop>
             </div>
-            
+
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setIsCropModalOpen(false)}
