@@ -48,7 +48,11 @@ type CategoryFilter = 'brand' | 'creator';
 type FormatFilter = 'vertical' | 'horizontal';
 type FacetFilter = CategoryFilter | FormatFilter;
 
-export default function SemanticSearchPage() {
+interface SemanticSearchPageProps {
+  description?: string;
+}
+
+export default function SemanticSearchPage({ description }: SemanticSearchPageProps) {
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchScope, setSearchScope] = useState<SearchScope>('all');
@@ -461,14 +465,15 @@ export default function SemanticSearchPage() {
   }, [searchScope]);
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="bg-gray-800 text-white py-4 px-6">
-        <h1 className="text-2xl font-bold">Creator Discovery</h1>
-        <p className="text-sm opacity-80">Semantic Search</p>
-      </header>
-
+    <div className="bg-white">
       <main className="container mx-auto px-4 py-8">
+        {/* Description */}
+        {description && (
+          <div className="mb-8 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg">
+            <p className="text-gray-700">{description}</p>
+          </div>
+        )}
+
         {/* Search Controls */}
         <div className="mb-8">
           <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">

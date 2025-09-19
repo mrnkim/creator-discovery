@@ -24,7 +24,11 @@ type VideoAnalysis = {
   [key: string]: unknown;
 };
 
-export default function BrandMentionDetectionPage() {
+interface BrandMentionDetectionProps {
+  description?: string;
+}
+
+export default function BrandMentionDetectionPage({ description }: BrandMentionDetectionProps) {
   // Environment variables
   const creatorIndexId = process.env.NEXT_PUBLIC_CREATOR_INDEX_ID || '';
 
@@ -768,14 +772,15 @@ export default function BrandMentionDetectionPage() {
 
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="bg-gray-800 text-white py-4 px-6">
-        <h1 className="text-2xl font-bold">Creator Discovery</h1>
-        <p className="text-sm opacity-80">Brand Mention Detection</p>
-      </header>
-
+    <div className="bg-white">
       <main className="container mx-auto px-4 py-8">
+        {/* Description */}
+        {description && (
+          <div className="mb-8 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg">
+            <p className="text-gray-700">{description}</p>
+          </div>
+        )}
+
         <ErrorBoundary FallbackComponent={ErrorFallback}>
           {isLoading ? (
             <div className="flex justify-center items-center h-64">

@@ -14,7 +14,11 @@ import SimilarVideoResults from '@/components/SimilarVideoResults';
 import { VideoData, EmbeddingSearchResult, VideoPage } from '@/types';
 import LoadingSpinner from '@/components/LoadingSpinner';
 
-export default function CreatorBrandMatch() {
+interface CreatorBrandMatchProps {
+  description?: string;
+}
+
+export default function CreatorBrandMatch({ description }: CreatorBrandMatchProps) {
   const [sourceType, setSourceType] = useState<'brand' | 'creator'>('brand'); // Default: Brand → Creator
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -96,7 +100,7 @@ export default function CreatorBrandMatch() {
       // Check and ensure embeddings for source and target videos
       setIsLoadingEmbeddings(true);
       setIsProcessingTargetEmbeddings(true);
-      
+
       const embeddingResult = await checkAndEnsureEmbeddings(
         selectedVideoId,
         sourceIndexId,
@@ -109,20 +113,20 @@ export default function CreatorBrandMatch() {
         processed: embeddingResult.processedCount,
         total: embeddingResult.totalCount
       });
-      
+
       setEmbeddingsReady(embeddingResult.success);
       setIsLoadingEmbeddings(false);
       setIsProcessingTargetEmbeddings(false);
 
       // Run text-to-video search
       const textResults = await textToVideoEmbeddingSearch(selectedVideoId, sourceIndexId, targetIndexId);
-      
+
       // Run video-to-video search
       const videoResults = await videoToVideoEmbeddingSearch(selectedVideoId, sourceIndexId, targetIndexId);
 
       // Combine results with a boost for videos that appear in both searches
       const combinedResults = combineSearchResults(textResults, videoResults);
-      
+
       setSimilarResults(combinedResults);
     } catch (error) {
       console.error('Error finding matches:', error);
@@ -137,7 +141,7 @@ export default function CreatorBrandMatch() {
     videoResults: EmbeddingSearchResult[]
   ): EmbeddingSearchResult[] => {
     const resultMap = new Map<string, EmbeddingSearchResult>();
-    
+
     // Process text search results
     textResults.forEach(result => {
       const videoId = result.metadata?.tl_video_id;
@@ -149,22 +153,22 @@ export default function CreatorBrandMatch() {
         });
       }
     });
-    
+
     // Process video search results and merge with text results if they exist
     videoResults.forEach(result => {
       const videoId = result.metadata?.tl_video_id;
       if (!videoId) return;
-      
+
       if (resultMap.has(videoId)) {
         // Video exists in both searches - merge and boost
         const existingResult = resultMap.get(videoId)!;
         const textScore = existingResult.textScore || 0;
         const videoScore = result.score;
-        
+
         // Calculate combined score with a boost
         const maxScore = Math.max(textScore, videoScore);
         const boostedScore = maxScore * 1.15; // 15% boost when in both results
-        
+
         resultMap.set(videoId, {
           ...existingResult,
           score: boostedScore,
@@ -181,7 +185,7 @@ export default function CreatorBrandMatch() {
         });
       }
     });
-    
+
     // Convert map to array and sort by score
     return Array.from(resultMap.values()).sort((a, b) => b.score - a.score);
   };
@@ -192,21 +196,22 @@ export default function CreatorBrandMatch() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="bg-gray-800 text-white py-4 px-6">
-        <h1 className="text-2xl font-bold">Creator Discovery</h1>
-        <p className="text-sm opacity-80">Creator–Brand Match</p>
-      </header>
-
+    <div className="bg-white">
       <main className="container mx-auto px-4 py-8">
+        {/* Description */}
+        {description && (
+          <div className="mb-8 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg">
+            <p className="text-gray-700">{description}</p>
+          </div>
+        )}
+
         {/* Source Type Toggle */}
         <div className="mb-6">
           <div className="flex items-center justify-between max-w-lg mx-auto bg-gray-100 p-4 rounded-lg">
             <span className={`px-4 py-2 rounded-md ${sourceType === 'brand' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
               Brand → Creator
             </span>
-            <button 
+            <button
               onClick={handleSourceTypeToggle}
               className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300"
             >
@@ -223,7 +228,7 @@ export default function CreatorBrandMatch() {
           <h2 className="text-xl font-semibold mb-4">
             Select {sourceType === 'brand' ? 'Brand' : 'Creator'} Video
           </h2>
-          
+
           {/* Video Dropdown */}
           <div className="max-w-lg mx-auto">
             <VideosDropDown
@@ -239,7 +244,7 @@ export default function CreatorBrandMatch() {
               footageVideoId={selectedVideoId}
             />
           </div>
-          
+
           {/* Selected Video Preview */}
           {selectedVideoId && (
             <div className="mt-6 flex justify-center">
@@ -250,7 +255,7 @@ export default function CreatorBrandMatch() {
               />
             </div>
           )}
-          
+
           {/* Find Matches Button */}
           <div className="mt-6 flex justify-center">
             <button
@@ -298,8 +303,8 @@ export default function CreatorBrandMatch() {
               </button>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div 
-                className="bg-blue-600 h-2.5 rounded-full" 
+              <div
+                className="bg-blue-600 h-2.5 rounded-full"
                 style={{ width: `${(targetEmbeddingsProgress.processed / targetEmbeddingsProgress.total) * 100}%` }}
               ></div>
             </div>
