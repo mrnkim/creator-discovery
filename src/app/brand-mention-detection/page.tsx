@@ -42,7 +42,8 @@ export default function BrandMentionDetectionPage({ description }: BrandMentionD
   // Filters
   const [selectedCreators, setSelectedCreators] = useState<string[]>([]);
   const [selectedFormats, setSelectedFormats] = useState<('vertical' | 'horizontal')[]>([]);
-  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
+  const [selectedTones, setSelectedTones] = useState<string[]>([]);
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [durationThreshold, setDurationThreshold] = useState<number>(0.5); // seconds
   const [timeWindow, setTimeWindow] = useState<{ start: number; end: number | null }>({ start: 0, end: null });
@@ -94,16 +95,25 @@ export default function BrandMentionDetectionPage({ description }: BrandMentionD
     return Array.from(formats);
   }, [videos]);
 
-  const availableRegions = useMemo(() => {
-    const regions = new Set<string>();
-    videos.forEach(video => {
-      const region =
-        video.user_metadata?.region ||
-        /* fallback */ 'Unknown';
-      regions.add(region.toString());
+  const availableStyles = useMemo(() => {
+    const styles = new Set<string>();
+    Object.values(analysisByVideo).forEach(analysis => {
+      if (analysis.styles) {
+        analysis.styles.forEach(style => styles.add(style));
+      }
     });
-    return Array.from(regions).sort();
-  }, [videos]);
+    return Array.from(styles).sort();
+  }, [analysisByVideo]);
+
+  const availableTones = useMemo(() => {
+    const tones = new Set<string>();
+    Object.values(analysisByVideo).forEach(analysis => {
+      if (analysis.tones) {
+        analysis.tones.forEach(tone => tones.add(tone));
+      }
+    });
+    return Array.from(tones).sort();
+  }, [analysisByVideo]);
 
   const availableBrands = useMemo(() => {
     const brands = new Set<string>();
@@ -144,19 +154,29 @@ export default function BrandMentionDetectionPage({ description }: BrandMentionD
         }
       }
 
-      // Filter by region
-      if (selectedRegions.length > 0) {
-        const region =
-          video.user_metadata?.region ||
-          /* fallback */ 'Unknown';
-        if (!selectedRegions.includes(region.toString())) {
+      // Filter by styles
+      if (selectedStyles.length > 0) {
+        const videoAnalysis = analysisByVideo[video._id];
+        const videoStyles = videoAnalysis?.styles || [];
+        const hasMatchingStyle = selectedStyles.some(style => videoStyles.includes(style));
+        if (!hasMatchingStyle) {
+          return false;
+        }
+      }
+
+      // Filter by tones
+      if (selectedTones.length > 0) {
+        const videoAnalysis = analysisByVideo[video._id];
+        const videoTones = videoAnalysis?.tones || [];
+        const hasMatchingTone = selectedTones.some(tone => videoTones.includes(tone));
+        if (!hasMatchingTone) {
           return false;
         }
       }
 
       return true;
     });
-  }, [videos, selectedCreators, selectedFormats, selectedRegions]);
+  }, [videos, selectedCreators, selectedFormats, selectedStyles, selectedTones, analysisByVideo]);
 
   // Filtered events based on selected filters and thresholds
   const filteredEvents = useMemo(() => {
@@ -645,11 +665,19 @@ export default function BrandMentionDetectionPage({ description }: BrandMentionD
     );
   }
 
-  function toggleRegion(region: string) {
-    setSelectedRegions(prev =>
-      prev.includes(region)
-        ? prev.filter(r => r !== region)
-        : [...prev, region]
+  function toggleStyle(style: string) {
+    setSelectedStyles(prev =>
+      prev.includes(style)
+        ? prev.filter(s => s !== style)
+        : [...prev, style]
+    );
+  }
+
+  function toggleTone(tone: string) {
+    setSelectedTones(prev =>
+      prev.includes(tone)
+        ? prev.filter(t => t !== tone)
+        : [...prev, tone]
     );
   }
 
@@ -665,7 +693,8 @@ export default function BrandMentionDetectionPage({ description }: BrandMentionD
   function resetFilters() {
     setSelectedCreators([]);
     setSelectedFormats([]);
-    setSelectedRegions([]);
+    setSelectedStyles([]);
+    setSelectedTones([]);
     setSelectedBrands([]);
     setDurationThreshold(0.5);
     setTimeWindow({ start: 0, end: null });
@@ -1081,22 +1110,43 @@ export default function BrandMentionDetectionPage({ description }: BrandMentionD
                     </div>
                   </div>
 
-                  {/* Region filter */}
+                  {/* Styles filter */}
                   <div>
-                    <h4 className="text-sm font-medium mb-2">Region</h4>
+                    <h4 className="text-sm font-medium mb-2">Styles</h4>
                     <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
-                      {availableRegions.map(region => (
+                      {availableStyles.map(style => (
                         <button
-                          key={region}
-                          onClick={() => toggleRegion(region)}
+                          key={style}
+                          onClick={() => toggleStyle(style)}
                           className={clsx(
                             'px-2 py-1 text-xs rounded-full',
-                            selectedRegions.includes(region)
+                            selectedStyles.includes(style)
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                          )}
+                        >
+                          {style}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tones filter */}
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Tones</h4>
+                    <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+                      {availableTones.map(tone => (
+                        <button
+                          key={tone}
+                          onClick={() => toggleTone(tone)}
+                          className={clsx(
+                            'px-2 py-1 text-xs rounded-full',
+                            selectedTones.includes(tone)
                               ? 'bg-blue-600 text-white'
                               : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                           )}
                         >
-                          {region}
+                          {tone}
                         </button>
                       ))}
                     </div>
