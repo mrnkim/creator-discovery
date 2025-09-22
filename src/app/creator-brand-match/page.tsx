@@ -11,6 +11,7 @@ import {
 import VideosDropDown from '@/components/VideosDropdown';
 import Video from '@/components/Video';
 import SimilarVideoResults from '@/components/SimilarVideoResults';
+import VideoModalSimple from '@/components/VideoModalSimple';
 import { VideoData, EmbeddingSearchResult, VideoPage } from '@/types';
 import LoadingSpinner from '@/components/LoadingSpinner';
 
@@ -29,6 +30,14 @@ export default function CreatorBrandMatch({ description }: CreatorBrandMatchProp
   const [isProcessingTargetEmbeddings, setIsProcessingTargetEmbeddings] = useState(false);
   const [targetEmbeddingsProgress, setTargetEmbeddingsProgress] = useState({ processed: 0, total: 0 });
   const [showProcessingMessage, setShowProcessingMessage] = useState(true);
+
+  // Modal state
+  const [modalVideo, setModalVideo] = useState<{
+    videoId: string;
+    videoUrl: string;
+    title: string;
+    description?: string;
+  } | null>(null);
 
   // Get index IDs from environment variables
   const brandIndexId = process.env.NEXT_PUBLIC_BRAND_INDEX_ID || '';
@@ -96,6 +105,26 @@ export default function CreatorBrandMatch({ description }: CreatorBrandMatchProp
     setSelectedVideoId(videoId);
     setSimilarResults([]);
     setEmbeddingsReady(false);
+  };
+
+  // Handle opening video modal
+  const handleOpenVideoModal = (videoId: string) => {
+    const video = videosData?.pages.flatMap((page: { data: VideoData[] }) => page.data)
+      .find((video: VideoData) => video._id === videoId);
+
+    if (video && video.hls?.video_url) {
+      setModalVideo({
+        videoId: video._id,
+        videoUrl: video.hls.video_url,
+        title: video.system_metadata?.filename || video.system_metadata?.video_title || 'Video',
+        description: `Duration: ${video.system_metadata?.duration ? Math.round(video.system_metadata.duration) : 0}s`
+      });
+    }
+  };
+
+  // Handle closing video modal
+  const handleCloseVideoModal = () => {
+    setModalVideo(null);
   };
 
   // Find matches between source and target videos
@@ -328,6 +357,7 @@ export default function CreatorBrandMatch({ description }: CreatorBrandMatchProp
                 videoId={selectedVideoId}
                 indexId={sourceIndexId}
                 showTitle={true}
+                onPlay={() => handleOpenVideoModal(selectedVideoId)}
               />
             </div>
           )}
@@ -404,6 +434,18 @@ export default function CreatorBrandMatch({ description }: CreatorBrandMatchProp
           </div>
         )}
       </main>
+
+      {/* Video Modal */}
+      {modalVideo && (
+        <VideoModalSimple
+          videoUrl={modalVideo.videoUrl}
+          videoId={modalVideo.videoId}
+          isOpen={!!modalVideo}
+          onClose={handleCloseVideoModal}
+          title={modalVideo.title}
+          description={modalVideo.description}
+        />
+      )}
     </div>
   );
 }
