@@ -486,27 +486,33 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
             <div className="flex items-center bg-gray-100 p-1 rounded-lg">
               <button
                 onClick={() => setSearchScope('all')}
+                disabled={hasSearched}
                 className={clsx(
-                  'px-4 py-2 rounded-md text-sm font-medium',
-                  searchScope === 'all' ? 'bg-blue-600 text-white' : 'text-gray-700'
+                  'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                  searchScope === 'all' ? 'bg-blue-600 text-white' : 'text-gray-700',
+                  hasSearched && 'opacity-50 cursor-not-allowed'
                 )}
               >
                 All
               </button>
               <button
                 onClick={() => setSearchScope('brand')}
+                disabled={hasSearched}
                 className={clsx(
-                  'px-4 py-2 rounded-md text-sm font-medium',
-                  searchScope === 'brand' ? 'bg-blue-600 text-white' : 'text-gray-700'
+                  'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                  searchScope === 'brand' ? 'bg-blue-600 text-white' : 'text-gray-700',
+                  hasSearched && 'opacity-50 cursor-not-allowed'
                 )}
               >
                 Brand
               </button>
               <button
                 onClick={() => setSearchScope('creator')}
+                disabled={hasSearched}
                 className={clsx(
-                  'px-4 py-2 rounded-md text-sm font-medium',
-                  searchScope === 'creator' ? 'bg-blue-600 text-white' : 'text-gray-700'
+                  'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+                  searchScope === 'creator' ? 'bg-blue-600 text-white' : 'text-gray-700',
+                  hasSearched && 'opacity-50 cursor-not-allowed'
                 )}
               >
                 Creator
@@ -669,9 +675,24 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
           ) : searchResults.length > 0 ? (
             <div>
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-semibold">
-                  Search Results ({filteredResults.length})
-                </h2>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-semibold">
+                    Search Results ({filteredResults.length})
+                  </h2>
+                  <span className="px-3 py-1 text-sm font-medium bg-blue-100 text-blue-800 rounded-full">
+                    {searchScope === 'all' ? 'All Videos' : searchScope === 'brand' ? 'Brand Videos' : 'Creator Videos'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setSearchResults([]);
+                    setHasSearched(false);
+                    setActiveFilters([]);
+                  }}
+                  className="text-sm text-gray-600 hover:text-gray-800 underline"
+                >
+                  Clear Search
+                </button>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
