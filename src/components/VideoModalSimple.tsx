@@ -134,70 +134,59 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
         </div>
 
         <div className="relative w-full px-6 pb-10 overflow-auto flex-grow">
-          <div className="relative w-full overflow-hidden rounded-[45.60px]" style={{ paddingTop: '56.25%' }}>
-            {/* Video Player */}
-            <video
-              ref={videoRef}
-              src={videoUrl}
-              controls
-              autoPlay={isPlaying}
-              muted={isMuted}
-              // volume={volume}
-              playsInline
-              width="100%"
-              height="100%"
-              style={{ position: 'absolute', top: 0, left: 0 }}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onVolumeChange={(e) => {
-                const video = e.currentTarget;
-                setVolume(video.volume);
-                setIsMuted(video.muted);
-              }}
-              onTimeUpdate={(e) => {
-                const video = e.currentTarget;
-                setCurrentTime(video.currentTime);
+        <div className="relative w-full aspect-[16/9] overflow-hidden rounded-[45.60px]">
+        {/* Video Player */}
+        <video
+    ref={videoRef}
+    controls
+    autoPlay={isPlaying}
+    muted={isMuted}
+    playsInline
+    className="absolute top-0 left-0 w-full h-full object-contain"
+    onPlay={() => setIsPlaying(true)}
+    onPause={() => setIsPlaying(false)}
+    onVolumeChange={(e) => {
+      const video = e.currentTarget;
+      setVolume(video.volume);
+      setIsMuted(video.muted);
+    }}
+    onTimeUpdate={(e) => {
+      const video = e.currentTarget;
+      setCurrentTime(video.currentTime);
 
-                // Loop back to start if we've reached the end time
-                if (endTime !== undefined && endTime !== null && video.currentTime >= endTime) {
-                  video.currentTime = startTime || 0;
-                }
-
-                // Seek back to start if we've gone before the start time
-                if (startTime !== undefined && startTime !== null && video.currentTime < startTime) {
-                  video.currentTime = startTime;
-                }
-              }}
-              onError={(error) => {
-                console.error('Video error:', error);
-                const video = error.currentTarget;
-                console.error('Video error details:', {
-                  error: video.error,
-                  networkState: video.networkState,
-                  readyState: video.readyState,
-                  src: video.src
-                });
-              }}
-              onLoadStart={() => console.log('Video loading started')}
-              onCanPlay={() => console.log('Video can play')}
-              onLoadedData={() => console.log('Video data loaded')}
-              controlsList="nodownload"
-            />
-
+      if (endTime !== undefined && video.currentTime >= endTime) {
+        video.currentTime = startTime || 0;
+      }
+      if (startTime !== undefined && video.currentTime < startTime) {
+        video.currentTime = startTime;
+      }
+    }}
+    onError={(error) => {
+      console.error('Video error:', error);
+      const video = error.currentTarget;
+      console.error('Video error details:', {
+        error: video.error,
+        networkState: video.networkState,
+        readyState: video.readyState,
+        src: video.src
+      });
+    }}
+    controlsList="nodownload"
+  />
             {/* Bounding box overlay - only show during the segment */}
             {showOverlay && bboxNorm && startTime !== undefined && endTime !== undefined &&
-             currentTime >= startTime && currentTime <= endTime && (
-              <div
-                className="absolute border-2 border-red-500 rounded bg-red-500/20"
-                style={{
-                  left: `${bboxNorm.x}%`,
-                  top: `${bboxNorm.y}%`,
-                  width: `${bboxNorm.w}%`,
-                  height: `${bboxNorm.h}%`,
-                }}
-              />
-            )}
-          </div>
+    currentTime >= startTime && currentTime <= endTime && (
+      <div
+        className="absolute border-2 border-red-500 rounded bg-red-500/20"
+        style={{
+          left: `${bboxNorm.x}%`,
+          top: `${bboxNorm.y}%`,
+          width: `${bboxNorm.w}%`,
+          height: `${bboxNorm.h}%`,
+        }}
+      />
+    )}
+</div>
 
           {/* Segment info below video player */}
           {(startTime !== undefined || endTime !== undefined) && (
