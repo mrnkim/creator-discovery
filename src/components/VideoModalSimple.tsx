@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import ReactPlayer from 'react-player';
 import { VideoData } from '@/types';
+import Hls from 'hls.js';
 
 interface VideoModalProps {
   videoUrl: string;
@@ -34,7 +34,7 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(true); // Start muted by default
   const [volume, setVolume] = useState<number>(1); // Volume state
-  const playerRef = useRef<ReactPlayer>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [currentTime, setCurrentTime] = useState<number>(0);
 
 
@@ -51,61 +51,45 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
     }
   }, [isOpen]);
 
-  // Handle muted state changes more carefully
+  // Handle HLS video loading
   useEffect(() => {
-    if (!isOpen || !playerRef.current) return;
+    if (!isOpen || !videoRef.current) return;
 
-    // Add event listener to the actual video element for better mute detection
-    const addMuteListeners = () => {
-      const player = playerRef.current;
-      if (!player) return;
+    const video = videoRef.current;
+    const isHLS = videoUrl.includes('.m3u8');
 
-      // Try to get the actual video element
-      const wrapper = player.wrapper;
-      if (wrapper) {
-        const videoElement = wrapper.querySelector('video') || wrapper.querySelector('hls-video');
-        if (videoElement) {
-          const handleVolumeChange = () => {
-            const currentMuted = videoElement.muted;
+    if (isHLS && Hls.isSupported()) {
+      const hls = new Hls();
+      hls.loadSource(videoUrl);
+      hls.attachMedia(video);
 
-            if (currentMuted !== isMuted) {
-              setIsMuted(currentMuted);
-            }
-          };
-
-          videoElement.addEventListener('volumechange', handleVolumeChange);
-
-          return () => {
-            videoElement.removeEventListener('volumechange', handleVolumeChange);
-          };
-        }
-      }
-    };
-
-    // Add listeners after a short delay to ensure the video element is ready
-    const timer = setTimeout(addMuteListeners, 500);
-
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [isMuted, isOpen]);
+      return () => {
+        hls.destroy();
+      };
+    } else if (isHLS && video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari native HLS support
+      video.src = videoUrl;
+    } else if (!isHLS) {
+      video.src = videoUrl;
+    }
+  }, [isOpen, videoUrl]);
 
   // Seek to startTime when metadata is available or when startTime changes
   useEffect(() => {
     if (!isOpen) return;
     if (startTime === undefined || startTime === null) return;
-    const player = playerRef.current;
-    if (!player) return;
+    const video = videoRef.current;
+    if (!video) return;
 
     const seekToStart = () => {
       try {
-        player.seekTo(startTime, 'seconds');
+        video.currentTime = startTime;
       } catch (err) {
         console.error('Failed to seek to startTime', err);
       }
     };
 
-    // Use a small delay to ensure the player is ready
+    // Use a small delay to ensure the video is ready
     const timer = setTimeout(seekToStart, 100);
     return () => clearTimeout(timer);
   }, [isOpen, startTime, videoUrl]);
@@ -151,83 +135,53 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
 
         <div className="relative w-full px-6 pb-10 overflow-auto flex-grow">
           <div className="relative w-full overflow-hidden rounded-[45.60px]" style={{ paddingTop: '56.25%' }}>
-            {/* Player */}
-            <ReactPlayer
-              ref={playerRef}
+            {/* Video Player */}
+            <video
+              ref={videoRef}
               src={videoUrl}
               controls
-              playing={isPlaying}
+              autoPlay={isPlaying}
               muted={isMuted}
-              volume={volume}
+              // volume={volume}
               playsInline
               width="100%"
               height="100%"
               style={{ position: 'absolute', top: 0, left: 0 }}
-              onReady={() => {
-                // Player is ready
-              }}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
               onVolumeChange={(e) => {
-                // Extract volume from event - it might be an event object or a number
-                let volumeValue;
-                let mutedValue;
-
-                if (typeof e === 'number') {
-                  volumeValue = e;
-                } else if (e && e.target) {
-                  volumeValue = typeof e.target.volume === 'number' ? e.target.volume : volume;
-                  mutedValue = typeof e.target.muted === 'boolean' ? e.target.muted : undefined;
-                } else if (e && typeof e.volume === 'number') {
-                  volumeValue = e.volume;
-                } else {
-                  return;
-                }
-
-                setVolume(volumeValue);
-
-                // Update muted state based on actual muted property if available
-                if (typeof mutedValue === 'boolean') {
-                  if (mutedValue !== isMuted) {
-                    setIsMuted(mutedValue);
-                  }
-                } else {
-                  // Fallback: detect mute/unmute based on volume changes
-                  if (volumeValue === 0 && !isMuted) {
-                    setIsMuted(true);
-                  } else if (volumeValue > 0 && isMuted) {
-                    setIsMuted(false);
-                  }
-                }
+                const video = e.currentTarget;
+                setVolume(video.volume);
+                setIsMuted(video.muted);
               }}
-              onMute={() => setIsMuted(true)}
-              onUnmute={() => setIsMuted(false)}
               onTimeUpdate={(e) => {
-                const el = e.currentTarget as HTMLVideoElement;
-                setCurrentTime(el.currentTime);
+                const video = e.currentTarget;
+                setCurrentTime(video.currentTime);
 
                 // Loop back to start if we've reached the end time
-                if (endTime !== undefined && endTime !== null && el.currentTime >= endTime) {
-                  el.currentTime = startTime || 0;
+                if (endTime !== undefined && endTime !== null && video.currentTime >= endTime) {
+                  video.currentTime = startTime || 0;
                 }
 
                 // Seek back to start if we've gone before the start time
-                if (startTime !== undefined && startTime !== null && el.currentTime < startTime) {
-                  el.currentTime = startTime;
+                if (startTime !== undefined && startTime !== null && video.currentTime < startTime) {
+                  video.currentTime = startTime;
                 }
               }}
               onError={(error) => {
-                console.error('ReactPlayer error', error);
+                console.error('Video error:', error);
+                const video = error.currentTarget;
+                console.error('Video error details:', {
+                  error: video.error,
+                  networkState: video.networkState,
+                  readyState: video.readyState,
+                  src: video.src
+                });
               }}
-              config={{
-                file: {
-                  attributes: {
-                    crossOrigin: "anonymous",
-                    controlsList: "nodownload",
-                    playsInline: true,
-                  },
-                },
-              }}
+              onLoadStart={() => console.log('Video loading started')}
+              onCanPlay={() => console.log('Video can play')}
+              onLoadedData={() => console.log('Video data loaded')}
+              controlsList="nodownload"
             />
 
             {/* Bounding box overlay - only show during the segment */}
