@@ -39,6 +39,12 @@ interface VideoDetails {
     height?: number;
     width?: number;
   };
+  user_metadata?: {
+    creator?: string;
+    video_creator?: string;
+    creator_id?: string;
+    [key: string]: any;
+  };
 }
 
 type SearchScope = 'all' | 'brand' | 'creator';
@@ -67,6 +73,15 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
     start?: number;
     end?: number;
   } | null>(null);
+
+  // Dynamic filter states
+  const [availableBrands, setAvailableBrands] = useState<string[]>([]);
+  const [availableCreators, setAvailableCreators] = useState<string[]>([]);
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  const [selectedCreators, setSelectedCreators] = useState<string[]>([]);
+  const [isBrandFilterOpen, setIsBrandFilterOpen] = useState(false);
+  const [isCreatorFilterOpen, setIsCreatorFilterOpen] = useState(false);
+
 
   // Ref to track if search was cleared
   const searchClearedRef = useRef(false);
@@ -124,6 +139,79 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
     }
   });
 
+  // Extract brands and creators from search results
+  const extractFiltersFromResults = (results: SearchResult[]) => {
+    const brands = new Set<string>();
+    const creators = new Set<string>();
+
+    console.log('🔍 Extracting filters from results:', results.length, 'results');
+
+    results.forEach((result, index) => {
+      if (result.videoDetails) {
+        console.log(`🔍 Result ${index}:`, {
+          filename: result.videoDetails.system_metadata?.filename,
+          videoTitle: result.videoDetails.system_metadata?.video_title,
+          userMetadata: result.videoDetails.user_metadata
+        });
+
+        // Extract brands from brand_product_events in user metadata
+        const brandProductEvents = result.videoDetails.user_metadata?.brand_product_events;
+        if (brandProductEvents) {
+          try {
+            const events = JSON.parse(brandProductEvents);
+            if (Array.isArray(events)) {
+              events.forEach((event: any) => {
+                if (event.brand) {
+                  brands.add(event.brand);
+                  console.log(`✅ Extracted brand from events: ${event.brand}`);
+                }
+              });
+            }
+          } catch (error) {
+            console.log(`❌ Error parsing brand_product_events:`, error);
+          }
+        }
+
+        // Fallback: Extract from filename if no brand events found for this video
+        const filename = result.videoDetails.system_metadata?.filename || '';
+        const videoTitle = result.videoDetails.system_metadata?.video_title || '';
+
+        // Only add filename-based brand if no brand events were found
+        if (!brandProductEvents) {
+          const filenameMatch = filename.match(/^([^_.]+)/);
+          if (filenameMatch) {
+            const brand = filenameMatch[1].trim();
+            brands.add(brand);
+            console.log(`✅ Extracted brand from filename: ${brand}`);
+          }
+        }
+
+        // Extract creator from user metadata
+        const creator = result.videoDetails.user_metadata?.creator ||
+                       result.videoDetails.user_metadata?.video_creator ||
+                       result.videoDetails.user_metadata?.creator_id;
+        if (creator) {
+          creators.add(creator.toString());
+          console.log(`✅ Extracted creator: ${creator}`);
+        } else {
+          console.log(`❌ No creator found in user metadata`);
+        }
+      } else {
+        console.log(`❌ Result ${index} has no videoDetails`);
+      }
+    });
+
+    console.log('🔍 Final extracted brands:', Array.from(brands));
+    console.log('🔍 Final extracted creators:', Array.from(creators));
+
+    setAvailableBrands(Array.from(brands).sort());
+    setAvailableCreators(Array.from(creators).sort());
+
+    // Set all brands and creators as selected by default
+    setSelectedBrands(Array.from(brands));
+    setSelectedCreators(Array.from(creators));
+  };
+
   // Clear search state
   const clearSearch = () => {
     console.log('🔍 clearSearch called');
@@ -134,10 +222,17 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
     setImageSrc('');
     setSearchResults([]);
     setHasSearched(false); // Reset search state
+    setActiveFilters([]); // Clear all active filters
+    setAvailableBrands([]);
+    setAvailableCreators([]);
+    setSelectedBrands([]);
+    setSelectedCreators([]);
+    setIsBrandFilterOpen(false);
+    setIsCreatorFilterOpen(false);
     if (searchInputRef.current) {
       searchInputRef.current.value = '';
     }
-    console.log('🔍 clearSearch completed - searchResults should be empty');
+    console.log('🔍 clearSearch completed - searchResults and filters should be empty');
   };
 
   // Fetch default videos for the selected scope (shown when no search results)
@@ -209,7 +304,11 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
       if (response.data && response.data.data) {
         console.log('🔍 Search response received, setting searchResults:', response.data.data.length, 'items');
         setSearchResults(response.data.data);
-        fetchVideoDetailsForResults(response.data.data);
+        // Fetch video details first, then extract filters
+        const resultsWithDetails = await fetchVideoDetailsForResults(response.data.data);
+        if (resultsWithDetails) {
+          extractFiltersFromResults(resultsWithDetails);
+        }
       }
     } catch (error) {
       console.error('Error performing text search:', error);
@@ -240,7 +339,11 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
 
       if (response.data && response.data.data) {
         setSearchResults(response.data.data);
-        fetchVideoDetailsForResults(response.data.data);
+        // Fetch video details first, then extract filters
+        const resultsWithDetails = await fetchVideoDetailsForResults(response.data.data);
+        if (resultsWithDetails) {
+          extractFiltersFromResults(resultsWithDetails);
+        }
       }
     } catch (error) {
       console.error('Error performing image search:', error);
@@ -283,8 +386,10 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
 
       console.log('🔍 fetchVideoDetailsForResults completed, updating searchResults with', updatedResults.length, 'items');
       setSearchResults(updatedResults);
+      return updatedResults;
     } catch (error) {
       console.error('Error fetching video details:', error);
+      return null;
     }
   };
   // Toggle a filter
@@ -298,32 +403,160 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
     });
   };
 
-  // Filter results based on active filters
+  // Toggle brand selection
+  const toggleBrand = (brand: string) => {
+    setSelectedBrands(prev => {
+      if (prev.includes(brand)) {
+        return prev.filter(b => b !== brand);
+      } else {
+        return [...prev, brand];
+      }
+    });
+  };
+
+  // Toggle creator selection
+  const toggleCreator = (creator: string) => {
+    setSelectedCreators(prev => {
+      if (prev.includes(creator)) {
+        return prev.filter(c => c !== creator);
+      } else {
+        return [...prev, creator];
+      }
+    });
+  };
+
+  // Select all brands
+  const selectAllBrands = () => {
+    setSelectedBrands([...availableBrands]);
+  };
+
+  // Select all creators
+  const selectAllCreators = () => {
+    setSelectedCreators([...availableCreators]);
+  };
+
+  // Clear all brand selections
+  const clearAllBrands = () => {
+    setSelectedBrands([]);
+  };
+
+  // Clear all creator selections
+  const clearAllCreators = () => {
+    setSelectedCreators([]);
+  };
+
+  // Filter results based on active filters and dynamic brand/creator filters
   const filteredResults = searchResults.filter(result => {
-    if (activeFilters.length === 0) return true;
+    // Apply format filters (vertical/horizontal)
+    if (activeFilters.length > 0) {
+      const formatFilters = activeFilters.filter(
+        (f): f is FormatFilter => f === 'vertical' || f === 'horizontal'
+      );
 
-    // Narrow activeFilters into specific typed arrays using type predicates
-    const categoryFilters = activeFilters.filter(
-      (f): f is CategoryFilter => f === 'brand' || f === 'creator'
-    );
-    const formatFilters = activeFilters.filter(
-      (f): f is FormatFilter => f === 'vertical' || f === 'horizontal'
-    );
-
-    let passesCategory = true;
-    let passesFormat = true;
-
-    if (categoryFilters.length > 0) {
-      const category = result.index_id === brandIndexId ? 'brand' : 'creator';
-      passesCategory = categoryFilters.includes(category);
+      if (formatFilters.length > 0 && result.format) {
+        if (!formatFilters.includes(result.format)) {
+          return false;
+        }
+      }
     }
 
-    if (formatFilters.length > 0 && result.format) {
-      passesFormat = formatFilters.includes(result.format);
+    // Apply dynamic brand filters
+    if (selectedBrands.length > 0 && result.videoDetails) {
+      const brandProductEvents = result.videoDetails.user_metadata?.brand_product_events;
+      let hasMatchingBrand = false;
+      let hasAnyBrand = false;
+
+      if (brandProductEvents) {
+        try {
+          const events = JSON.parse(brandProductEvents);
+          if (Array.isArray(events)) {
+            hasAnyBrand = events.length > 0;
+            hasMatchingBrand = events.some((event: any) =>
+              event.brand && selectedBrands.includes(event.brand)
+            );
+          }
+        } catch (error) {
+          console.log(`❌ Error parsing brand_product_events in filter:`, error);
+        }
+      }
+
+      // Fallback: check filename if no brand events
+      if (!hasAnyBrand) {
+        const filename = result.videoDetails.system_metadata?.filename || '';
+        const filenameMatch = filename.match(/^([^_.]+)/);
+        if (filenameMatch) {
+          const brand = filenameMatch[1].trim();
+          hasAnyBrand = true;
+          hasMatchingBrand = selectedBrands.includes(brand);
+        }
+      }
+
+      // Only exclude if video has brand info but doesn't match selected brands
+      if (hasAnyBrand && !hasMatchingBrand) {
+        return false;
+      }
+      // If no brand info exists, keep the result (don't exclude creator videos)
     }
 
-    return passesCategory && passesFormat;
+    // Apply dynamic creator filters
+    if (selectedCreators.length > 0 && result.videoDetails) {
+      const creator = result.videoDetails.user_metadata?.creator ||
+                     result.videoDetails.user_metadata?.video_creator ||
+                     result.videoDetails.user_metadata?.creator_id;
+
+      if (creator && !selectedCreators.includes(creator.toString())) {
+        // If creator exists but is not in selected list, exclude this result
+        return false;
+      }
+      // If no creator exists, keep the result (don't exclude brand videos)
+    }
+
+    return true;
   });
+
+  // Filtered results states for display - using useMemo instead of useState to avoid infinite loops
+  const filteredBrands = React.useMemo(() => {
+    const brandsInResults = new Set<string>();
+
+    filteredResults.forEach(result => {
+      if (result.videoDetails) {
+        const brandProductEvents = result.videoDetails.user_metadata?.brand_product_events;
+        if (brandProductEvents) {
+          try {
+            const events = JSON.parse(brandProductEvents);
+            if (Array.isArray(events)) {
+              events.forEach((event: any) => {
+                if (event.brand) {
+                  brandsInResults.add(event.brand);
+                }
+              });
+            }
+          } catch (error) {
+            console.log(`❌ Error parsing brand_product_events in filteredBrands:`, error);
+          }
+        }
+      }
+    });
+
+    return Array.from(brandsInResults).sort();
+  }, [filteredResults]);
+
+  const filteredCreators = React.useMemo(() => {
+    const creatorsInResults = new Set<string>();
+
+    filteredResults.forEach(result => {
+      if (result.videoDetails) {
+        const creator = result.videoDetails.user_metadata?.creator ||
+                       result.videoDetails.user_metadata?.video_creator ||
+                       result.videoDetails.user_metadata?.creator_id;
+        if (creator) {
+          creatorsInResults.add(creator.toString());
+        }
+      }
+    });
+
+    return Array.from(creatorsInResults).sort();
+  }, [filteredResults]);
 
   // Handle crop completion
   const handleCropComplete = (crop: Crop) => {
@@ -605,33 +838,52 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
           )}
         </div>
 
-        {/* Facet Filters */}
-        {searchResults.length > 0 && (
+        {/* Dynamic Filters */}
+        {searchResults.length > 0 && (availableBrands.length > 0 || availableCreators.length > 0) && (
           <div className="mb-6">
             <h2 className="text-lg font-semibold mb-2">Filters</h2>
             <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => toggleFilter('brand')}
-                className={clsx(
-                  'px-3 py-1 text-sm rounded-full',
-                  activeFilters.includes('brand')
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                )}
-              >
-                Brand
-              </button>
-              <button
-                onClick={() => toggleFilter('creator')}
-                className={clsx(
-                  'px-3 py-1 text-sm rounded-full',
-                  activeFilters.includes('creator')
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                )}
-              >
-                Creator
-              </button>
+              {/* Brand Filter */}
+              {availableBrands.length > 0 && (
+                <button
+                  onClick={() => setIsBrandFilterOpen(true)}
+                  className={clsx(
+                    'px-3 py-1 text-sm rounded-full flex items-center gap-1 transition-colors',
+                    filteredBrands.length === 0
+                      ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                      : filteredBrands.length === availableBrands.length
+                      ? 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  )}
+                >
+                  Brands {filteredBrands.length === 0 ? '(0)' : filteredBrands.length === availableBrands.length ? '(All)' : `(${filteredBrands.length}/${availableBrands.length})`}
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              )}
+
+              {/* Creator Filter */}
+              {availableCreators.length > 0 && (
+                <button
+                  onClick={() => setIsCreatorFilterOpen(true)}
+                  className={clsx(
+                    'px-3 py-1 text-sm rounded-full flex items-center gap-1 transition-colors',
+                    filteredCreators.length === 0
+                      ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                      : filteredCreators.length === availableCreators.length
+                      ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                      : 'bg-green-600 text-white hover:bg-green-700'
+                  )}
+                >
+                  Creators {filteredCreators.length === 0 ? '(0)' : filteredCreators.length === availableCreators.length ? '(All)' : `(${filteredCreators.length}/${availableCreators.length})`}
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              )}
+
+              {/* Format Filters */}
               <button
                 onClick={() => toggleFilter('vertical')}
                 className={clsx(
@@ -654,12 +906,20 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
               >
                 Horizontal
               </button>
-              {activeFilters.length > 0 && (
+
+              {/* Clear All Button */}
+              {(selectedBrands.length < availableBrands.length ||
+                selectedCreators.length < availableCreators.length ||
+                activeFilters.length > 0) && (
                 <button
-                  onClick={() => setActiveFilters([])}
+                  onClick={() => {
+                    setSelectedBrands([...availableBrands]);
+                    setSelectedCreators([...availableCreators]);
+                    setActiveFilters([]);
+                  }}
                   className="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800 hover:bg-red-200"
                 >
-                  Clear Filters
+                  Clear All
                 </button>
               )}
             </div>
@@ -959,6 +1219,126 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
               >
                 Crop & Search
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Brand Filter Popup */}
+      {isBrandFilterOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-96 overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">Brands</h3>
+              <button
+                onClick={() => setIsBrandFilterOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Select brands to filter videos. Creator videos will still be shown.
+            </p>
+
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={selectAllBrands}
+                className="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded hover:bg-blue-200"
+              >
+                Select All
+              </button>
+              <button
+                onClick={clearAllBrands}
+                className="px-3 py-1 text-sm bg-gray-100 text-gray-800 rounded hover:bg-gray-200"
+              >
+                Clear All
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {availableBrands.map(brand => (
+                <label key={brand} className="flex items-center py-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedBrands.includes(brand)}
+                    onChange={() => toggleBrand(brand)}
+                    className="mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm text-gray-700">{brand}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="mt-4 pt-4 border-t">
+              <button
+                onClick={() => setIsBrandFilterOpen(false)}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Apply Filters
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Creator Filter Popup */}
+      {isCreatorFilterOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-96 overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">Creators</h3>
+              <button
+                onClick={() => setIsCreatorFilterOpen(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Select creators to filter videos. Brand videos will still be shown.
+            </p>
+
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={selectAllCreators}
+                className="px-3 py-1 text-sm bg-green-100 text-green-800 rounded hover:bg-green-200"
+              >
+                Select All
+              </button>
+              <button
+                onClick={clearAllCreators}
+                className="px-3 py-1 text-sm bg-gray-100 text-gray-800 rounded hover:bg-gray-200"
+              >
+                Clear All
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {availableCreators.map(creator => (
+                <label key={creator} className="flex items-center py-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedCreators.includes(creator)}
+                    onChange={() => toggleCreator(creator)}
+                    className="mr-3 h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                  />
+                  <span className="text-sm text-gray-700">{creator}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="mt-4 pt-4 border-t">
+              <button
+                onClick={() => setIsCreatorFilterOpen(false)}
+                className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                Apply Filters
               </button>
             </div>
           </div>
