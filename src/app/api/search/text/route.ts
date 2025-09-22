@@ -71,43 +71,76 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Search each index in parallel
-    const searchPromises = indicesToSearch.map(async (indexId) => {
-      const searchDataForm = new FormData();
-      searchDataForm.append("search_options", "visual");
-      searchDataForm.append("search_options", "audio");
-      searchDataForm.append("group_by", "clip");
-      searchDataForm.append("sort_option", "score");
-      searchDataForm.append("page_limit", page_limit.toString());
-      searchDataForm.append("index_id", indexId);
-      searchDataForm.append("query_text", query);
+    // Helper function to retry API calls
+    const retryApiCall = async (indexId: string, retryCount = 0): Promise<any> => {
+      const maxRetries = 2;
+      const retryDelay = 1000 * (retryCount + 1); // 1s, 2s delays
+      
+      try {
+        const searchDataForm = new FormData();
+        searchDataForm.append("search_options", "visual");
+        searchDataForm.append("search_options", "audio");
+        searchDataForm.append("group_by", "clip");
+        searchDataForm.append("sort_option", "score");
+        searchDataForm.append("page_limit", page_limit.toString());
+        searchDataForm.append("index_id", indexId);
+        searchDataForm.append("query_text", query);
 
-      const url = `${apiBaseUrl}/search`;
+        const url = `${apiBaseUrl}/search`;
 
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          // Let fetch set the multipart boundary automatically
-          "x-api-key": apiKey,
-        },
-        body: searchDataForm,
-      });
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            // Let fetch set the multipart boundary automatically
+            "x-api-key": apiKey,
+          },
+          body: searchDataForm,
+        });
 
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(
-          `Twelve Labs API error ${response.status}: ${text || response.statusText}`
-        );
+        if (!response.ok) {
+          const text = await response.text();
+          
+          // Handle specific error cases
+          if (response.status === 500 && retryCount < maxRetries) {
+            console.log(`Retrying API call for index ${indexId} (attempt ${retryCount + 1}/${maxRetries + 1})`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            return retryApiCall(indexId, retryCount + 1);
+          } else if (response.status === 500) {
+            throw new Error(
+              `Twelve Labs API is temporarily unavailable (500). Please try again in a few moments.`
+            );
+          } else if (response.status === 429) {
+            throw new Error(
+              `Rate limit exceeded. Please wait a moment before searching again.`
+            );
+          } else if (response.status === 401) {
+            throw new Error(
+              `Authentication failed. Please check your API configuration.`
+            );
+          } else {
+            throw new Error(
+              `Twelve Labs API error ${response.status}: ${text || response.statusText}`
+            );
+          }
+        }
+
+        const responseData = await response.json();
+
+        return {
+          indexId,
+          responseData,
+        };
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('500') && retryCount < maxRetries) {
+          console.log(`Retrying API call for index ${indexId} due to 500 error (attempt ${retryCount + 1}/${maxRetries + 1})`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          return retryApiCall(indexId, retryCount + 1);
+        }
+        throw error;
       }
+    };
 
-      const responseData = await response.json();
-
-      return {
-        indexId,
-        responseData,
-      };
-    });
-
+    const searchPromises = indicesToSearch.map(indexId => retryApiCall(indexId));
     const searchResults = await Promise.all(searchPromises);
 
     // Process and merge results
