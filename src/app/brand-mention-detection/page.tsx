@@ -174,9 +174,18 @@ export default function BrandMentionDetectionPage({ description }: BrandMentionD
         }
       }
 
+      // Filter by brands - only show videos that have events with selected brands
+      if (selectedBrands.length > 0) {
+        const videoEvents = eventsByVideo[video._id] || [];
+        const hasMatchingBrand = videoEvents.some(event => selectedBrands.includes(event.brand));
+        if (!hasMatchingBrand) {
+          return false;
+        }
+      }
+
       return true;
     });
-  }, [videos, selectedCreators, selectedFormats, selectedStyles, selectedTones, analysisByVideo]);
+  }, [videos, selectedCreators, selectedFormats, selectedStyles, selectedTones, selectedBrands, analysisByVideo, eventsByVideo]);
 
   // Filtered events based on selected filters and thresholds
   const filteredEvents = useMemo(() => {
@@ -190,7 +199,7 @@ export default function BrandMentionDetectionPage({ description }: BrandMentionD
 
       // Apply filters to events
       const filtered = events.filter(event => {
-        // Filter by brand
+        // Filter by brand (only if brands are selected)
         if (selectedBrands.length > 0 && !selectedBrands.includes(event.brand)) {
           return false;
         }
