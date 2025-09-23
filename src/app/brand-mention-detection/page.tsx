@@ -861,25 +861,6 @@ export default function BrandMentionDetectionPage() {
                 {viewMode === 'per-video' && selectedVideoId && (
                   <div className="flex items-center space-x-4">
                     <button
-                      onClick={() => forceAnalyzeVideo(selectedVideoId)}
-                      disabled={isAnalyzing}
-                      className={clsx(
-                        'px-4 py-2 rounded-md text-sm font-medium transition-colors',
-                        isAnalyzing
-                          ? 'bg-gray-400 text-white cursor-not-allowed'
-                          : 'bg-orange-600 text-white hover:bg-orange-700'
-                      )}
-                    >
-                      {isAnalyzing ? (
-                        <div className="flex items-center space-x-2">
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          <span>Analyzing...</span>
-                        </div>
-                      ) : (
-                        '🔄 Force Re-analyze'
-                      )}
-                    </button>
-                    <button
                       onClick={() => {
                         setViewMode('library');
                         setSelectedVideoId(null);
