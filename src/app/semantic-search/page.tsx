@@ -1027,7 +1027,7 @@ export default function SemanticSearchPage() {
             <div className="flex justify-center items-center h-64">
               <LoadingSpinner size="lg" />
             </div>
-          ) : enhancedResults.length > 0 ? (
+          ) : filteredResults.length > 0 ? (
             <div>
               <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-3">
@@ -1075,9 +1075,9 @@ export default function SemanticSearchPage() {
               )}
 
               {/* No more results indicator */}
-              {!hasMoreResults && enhancedResults.length > 0 && (
+              {!hasMoreResults && filteredResults.length > 0 && (
                 <div className="mt-8 text-center py-4 text-gray-500">
-                  End of results - {enhancedResults.length} videos found
+                  End of results - {filteredResults.length} videos shown
                 </div>
               )}
             </div>
@@ -1086,8 +1086,16 @@ export default function SemanticSearchPage() {
               <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              <p className="text-lg font-medium mb-2">No search results found</p>
-              <p className="text-sm text-gray-400">Try adjusting your search criteria or scope</p>
+              <p className="text-lg font-medium mb-2">{enhancedResults.length > 0 ? 'No results match the selected filters' : 'No search results found'}</p>
+              <p className="text-sm text-gray-400">{enhancedResults.length > 0 ? 'Try clearing or changing filters' : 'Try adjusting your search query or scope'}</p>
+              {enhancedResults.length > 0 && (
+                <button
+                  onClick={() => setActiveFilters([])}
+                  className="mt-3 px-3 py-1 text-sm rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300"
+                >
+                  Clear Filters
+                </button>
+              )}
             </div>
           ) : (
             <div>
