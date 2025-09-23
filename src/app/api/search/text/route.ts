@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Helper function to retry API calls
-    const retryApiCall = async (indexId: string, retryCount = 0): Promise<any> => {
+    const retryApiCall = async (indexId: string, retryCount = 0): Promise<{ indexId: string; responseData: unknown }> => {
       const maxRetries = 2;
       const retryDelay = 1000 * (retryCount + 1); // 1s, 2s delays
 
@@ -156,12 +156,13 @@ export async function POST(request: NextRequest) {
     let mergedResults: SearchResult[] = [];
 
     searchResults.forEach(({ indexId, responseData }) => {
-      if (responseData && responseData.data) {
+      const data = responseData as { data?: TLSearchItem[]; page_info?: unknown };
+      if (data && data.data) {
         // Store page info for this index
-        pageInfoByIndex[indexId] = responseData.page_info || {};
+        pageInfoByIndex[indexId] = data.page_info || {};
 
         // Normalize and add index information to each result
-        const normalizedResults = (responseData.data as TLSearchItem[]).map((item: TLSearchItem) => ({
+        const normalizedResults = (data.data as TLSearchItem[]).map((item: TLSearchItem) => ({
           video_id: item.video_id,
           thumbnail_url: item.thumbnail_url,
           start: item.start,
@@ -191,11 +192,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       pageInfoByIndex,
       data: mergedResults,
-      hasMore: Object.values(pageInfoByIndex).some((pageInfo: any) => pageInfo.next_page_token),
+      hasMore: Object.values(pageInfoByIndex).some((pageInfo: unknown) => (pageInfo as { next_page_token?: string }).next_page_token),
       nextPageTokens: Object.fromEntries(
-        Object.entries(pageInfoByIndex).map(([indexId, pageInfo]: [string, any]) => [
+        Object.entries(pageInfoByIndex).map(([indexId, pageInfo]: [string, unknown]) => [
           indexId,
-          pageInfo.next_page_token || null
+          (pageInfo as { next_page_token?: string }).next_page_token || null
         ])
       )
     });

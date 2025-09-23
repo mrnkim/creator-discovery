@@ -124,7 +124,7 @@ interface VideoDetails {
     creator?: string;
     video_creator?: string;
     creator_id?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -233,7 +233,7 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
       const newTokens: Record<string, string | null> = { ...nextPageTokens };
 
       responses.forEach(({ indexId, data }) => {
-        if (data && data.data) {
+        if (data && data.data && indexId) {
           console.log(`🔍 Results from ${indexId}:`, data.data.length);
           newResults.push(...data.data);
           newTokens[indexId] = data.pageInfo?.next_page_token || null;
@@ -1035,11 +1035,9 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
               <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-semibold">
-                    Search Results ({totalResults.all > 0 ? totalResults.all : filteredResults.length})
+                    Search Results
                   </h2>
-                  <span className="px-3 py-1 text-sm font-medium bg-blue-100 text-blue-800 rounded-full">
-                    All Videos
-                  </span>
+
                 </div>
                 <button
                   onClick={clearSearch}
