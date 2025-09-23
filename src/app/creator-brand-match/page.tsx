@@ -15,11 +15,8 @@ import VideoModalSimple from '@/components/VideoModalSimple';
 import { VideoData, EmbeddingSearchResult, VideoPage } from '@/types';
 import LoadingSpinner from '@/components/LoadingSpinner';
 
-interface CreatorBrandMatchProps {
-  description?: string;
-}
-
-export default function CreatorBrandMatch({ description }: CreatorBrandMatchProps) {
+export default function CreatorBrandMatch() {
+  const description: string | undefined = undefined;
   const [sourceType, setSourceType] = useState<'brand' | 'creator'>('brand'); // Default: Brand → Creator
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
