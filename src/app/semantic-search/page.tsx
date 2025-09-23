@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import axios from 'axios';
 import clsx from 'clsx';
 import ReactCrop, { Crop } from 'react-image-crop';
 import { useDropzone } from 'react-dropzone';
+import { useInView } from 'react-intersection-observer';
 import 'react-image-crop/dist/ReactCrop.css';
 import { fetchVideoDetails } from '@/hooks/apiHooks';
 import LoadingSpinner from '@/components/LoadingSpinner';
@@ -24,6 +25,86 @@ interface SearchResult {
   videoDetails?: VideoDetails;
   format?: 'vertical' | 'horizontal';
 }
+
+// 🔧 PERFORMANCE FIX: Memoized VideoCard component to prevent unnecessary re-renders
+const VideoCard = React.memo<{
+  result: SearchResult;
+  index: number;
+  brandIndexId: string | undefined;
+  onVideoClick: (result: SearchResult) => void;
+  formatTime: (seconds: number) => string;
+  getConfidenceClass: (confidence: string) => string;
+}>(({ result, index, brandIndexId, onVideoClick, formatTime, getConfidenceClass }) => {
+  // Debug logging for re-renders
+  if (index === 0) {
+    console.log('🔍 VideoCard re-rendered - first card of batch');
+  }
+
+  return (
+    <div
+      className="relative rounded-lg overflow-hidden shadow-md cursor-pointer transform transition hover:scale-[1.02]"
+      onClick={() => onVideoClick(result)}
+    >
+      {/* Thumbnail */}
+      <div className="relative aspect-video">
+        <img
+          src={result.thumbnail_url}
+          alt="Video thumbnail"
+          className="w-full h-full object-cover"
+        />
+
+        {/* Confidence Badge */}
+        <div className="absolute top-2 left-2">
+          <span className={clsx(
+            'px-2 py-1 text-xs font-bold text-white rounded-md',
+            getConfidenceClass(result.confidence)
+          )}>
+            {result.confidence}
+          </span>
+        </div>
+
+        {/* Index Badge */}
+        <div className="absolute top-2 right-2">
+          <span className={clsx(
+            'px-2 py-1 text-xs font-bold text-white rounded-md',
+            result.index_id === brandIndexId ? 'bg-purple-600' : 'bg-green-600'
+          )}>
+            {result.index_id === brandIndexId ? 'Brand' : 'Creator'}
+          </span>
+        </div>
+
+        {/* Time Range */}
+        <div className="absolute bottom-2 right-2">
+          <span className="px-2 py-1 text-xs font-bold text-white bg-black bg-opacity-60 rounded-md">
+            {formatTime(result.start)} - {formatTime(result.end)}
+          </span>
+        </div>
+
+        {/* Format Badge (if available) */}
+        {result.format && (
+          <div className="absolute bottom-2 left-2">
+            <span className={clsx(
+              'px-2 py-1 text-xs font-bold text-white rounded-md bg-gray-700',
+            )}>
+              {result.format === 'vertical' ? 'Vertical' : 'Horizontal'}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Title */}
+      <div className="p-2">
+        <h3 className="text-sm font-medium truncate">
+          {result.videoDetails?.system_metadata?.filename ||
+           result.videoDetails?.system_metadata?.video_title ||
+           `Video ${result.video_id}`}
+        </h3>
+      </div>
+    </div>
+  );
+});
+
+VideoCard.displayName = 'VideoCard';
 
 interface VideoDetails {
   _id: string;
@@ -58,12 +139,9 @@ interface SemanticSearchPageProps {
 export default function SemanticSearchPage({ description }: SemanticSearchPageProps) {
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [allResults, setAllResults] = useState<SearchResult[]>([]);
-  const [brandResults, setBrandResults] = useState<SearchResult[]>([]);
-  const [creatorResults, setCreatorResults] = useState<SearchResult[]>([]);
+  const [enhancedResults, setEnhancedResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false); // Track if a search has been performed
+  const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<FacetFilter[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<{
@@ -74,25 +152,129 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
     end?: number;
   } | null>(null);
 
+  // 🔧 NEW: Total results count from API
+  const [totalResults, setTotalResults] = useState<{
+    all: number;
+    brands: number;
+    creators: number;
+  }>({ all: 0, brands: 0, creators: 0 });
+
   // Simple filter states - just toggle between all/brands/creators results
   const [activeFilter, setActiveFilter] = useState<'all' | 'brands' | 'creators'>('all');
 
-  // Toggle filter to show different result sets
-  const toggleFilter = (filter: 'all' | 'brands' | 'creators') => {
-    setActiveFilter(filter);
+  // 🔧 PERFORMANCE FIX: Simplified pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(24);
+  const [hasMoreResults, setHasMoreResults] = useState(false);
+  const [nextPageTokens, setNextPageTokens] = useState<Record<string, string | null>>({});
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-    switch (filter) {
-      case 'all':
-        setSearchResults(allResults);
-        break;
-      case 'brands':
-        setSearchResults(brandResults);
-        break;
-      case 'creators':
-        setSearchResults(creatorResults);
-        break;
+  // Using intersection observer for infinite scroll
+  const { ref: observerRef, inView } = useInView({
+    threshold: 0.1,
+    triggerOnce: false,
+  });
+
+  // 🔧 PERFORMANCE FIX: Simplified toggle filter function
+  const toggleFilter = useCallback((filter: 'all' | 'brands' | 'creators') => {
+    console.log('🔍 toggleFilter called:', filter);
+    setActiveFilter(filter);
+  }, []);
+
+  // 🔧 PERFORMANCE FIX: Simplified load more results function based on reference code
+  const loadMoreResults = useCallback(async () => {
+    console.log('🔍 loadMoreResults called:');
+    console.log('  - hasMoreResults:', hasMoreResults);
+    console.log('  - isLoadingMore:', isLoadingMore);
+    console.log('  - currentPage:', currentPage);
+    console.log('  - nextPageTokens:', nextPageTokens);
+
+    if (!hasMoreResults || isLoadingMore) {
+      console.log('❌ Load more blocked - hasMoreResults:', hasMoreResults, 'isLoadingMore:', isLoadingMore);
+      return;
     }
-  };
+
+    setIsLoadingMore(true);
+
+    try {
+      const brandIndexId = process.env.NEXT_PUBLIC_BRAND_INDEX_ID;
+      const creatorIndexId = process.env.NEXT_PUBLIC_CREATOR_INDEX_ID;
+
+      const brandToken = nextPageTokens[brandIndexId!];
+      const creatorToken = nextPageTokens[creatorIndexId!];
+
+      console.log('🔍 Available tokens:', { brandToken, creatorToken });
+
+      // Make parallel requests for both indices if tokens exist
+      const requests = [];
+
+      if (brandToken) {
+        requests.push(
+          axios.get(`/api/search/byToken?pageToken=${brandToken}&indexId=${brandIndexId}`)
+            .then(response => ({ indexId: brandIndexId, data: response.data }))
+        );
+      }
+
+      if (creatorToken) {
+        requests.push(
+          axios.get(`/api/search/byToken?pageToken=${creatorToken}&indexId=${creatorIndexId}`)
+            .then(response => ({ indexId: creatorIndexId, data: response.data }))
+        );
+      }
+
+      if (requests.length === 0) {
+        console.log('❌ No tokens available for load more');
+        setHasMoreResults(false);
+        return;
+      }
+
+      const responses = await Promise.all(requests);
+      const newResults: SearchResult[] = [];
+      const newTokens: Record<string, string | null> = { ...nextPageTokens };
+
+      responses.forEach(({ indexId, data }) => {
+        if (data && data.data) {
+          console.log(`🔍 Results from ${indexId}:`, data.data.length);
+          newResults.push(...data.data);
+          newTokens[indexId] = data.pageInfo?.next_page_token || null;
+        }
+      });
+
+      // Fetch video details for new results
+      const newResultsWithDetails = await fetchVideoDetailsForResults(newResults, true);
+
+      if (newResultsWithDetails && newResultsWithDetails.length > 0) {
+        console.log('🔍 Adding new results:', newResultsWithDetails.length);
+
+        // 🔧 PERFORMANCE FIX: Single state update with duplicate check
+        setEnhancedResults(prev => {
+          // Check for duplicates based on unique identifiers
+          const existingIds = new Set(prev.map(item => `${item.video_id}_${item.start}_${item.end}`));
+
+          // Filter out duplicates
+          const uniqueNewResults = newResultsWithDetails.filter(item => {
+            const itemKey = `${item.video_id}_${item.start}_${item.end}`;
+            return !existingIds.has(itemKey);
+          });
+
+          const updated = [...prev, ...uniqueNewResults];
+          console.log('🔍 Updated enhancedResults:', prev.length, '->', updated.length);
+          return updated;
+        });
+
+        // Update pagination state
+        setNextPageTokens(newTokens);
+        setCurrentPage(prev => prev + 1);
+        setHasMoreResults(Object.values(newTokens).some(token => token !== null));
+      } else {
+        setHasMoreResults(false);
+      }
+    } catch (error) {
+      console.error('Error loading more results:', error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [hasMoreResults, isLoadingMore, currentPage, nextPageTokens]);
 
 
   // Ref to track if search was cleared
@@ -153,25 +335,27 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
 
 
   // Clear search state
-  const clearSearch = () => {
+  const clearSearch = useCallback(() => {
     console.log('🔍 clearSearch called');
     searchClearedRef.current = true; // Mark that search was cleared
     setSearchQuery('');
     setImageFile(null);
     setImageUrl('');
     setImageSrc('');
-    setSearchResults([]);
-    setAllResults([]);
-    setBrandResults([]);
-    setCreatorResults([]);
-    setHasSearched(false); // Reset search state
-    setActiveFilters([]); // Clear all active filters
-    setActiveFilter('all'); // Reset to all filter
+    setEnhancedResults([]);
+    setTotalResults({ all: 0, brands: 0, creators: 0 });
+    setHasSearched(false);
+    setActiveFilters([]);
+    setActiveFilter('all');
+    setCurrentPage(1);
+    setHasMoreResults(false);
+    setNextPageTokens({});
+    setIsLoadingMore(false);
     if (searchInputRef.current) {
       searchInputRef.current.value = '';
     }
-    console.log('🔍 clearSearch completed - searchResults and filters should be empty');
-  };
+    console.log('🔍 clearSearch completed - enhancedResults and filters should be empty');
+  }, []);
 
   // Fetch default videos (shown when no search results)
   const fetchDefaultVideos = async () => {
@@ -212,7 +396,7 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
     searchClearedRef.current = false; // Reset the cleared flag
     setIsSearching(true);
     setError(null); // Clear any previous errors
-    setSearchResults([]);
+    setEnhancedResults([]);
     setHasSearched(true); // Mark that a search has been performed
 
     try {
@@ -223,7 +407,17 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
       });
 
       if (response.data && response.data.data) {
-        console.log('🔍 Search response received, setting searchResults:', response.data.data.length, 'items');
+        console.log('🔍 Search response received:');
+        console.log('  - Total items:', response.data.data.length);
+        console.log('  - Response structure:', {
+          hasData: !!response.data.data,
+          dataLength: response.data.data.length,
+          firstItem: response.data.data[0] ? {
+            video_id: response.data.data[0].video_id,
+            index_id: response.data.data[0].index_id,
+            confidence: response.data.data[0].confidence
+          } : null
+        });
 
         // Separate results by index
         const allResults: SearchResult[] = [];
@@ -241,10 +435,62 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
           }
         });
 
-        setAllResults(allResults);
-        setBrandResults(brandResults);
-        setCreatorResults(creatorResults);
-        setSearchResults(allResults); // Default to showing all results
+        console.log('🔍 Results separated:');
+        console.log('  - All results:', allResults.length);
+        console.log('  - Brand results:', brandResults.length);
+        console.log('  - Creator results:', creatorResults.length);
+        console.log('  - Brand index ID:', process.env.NEXT_PUBLIC_BRAND_INDEX_ID);
+        console.log('  - Creator index ID:', process.env.NEXT_PUBLIC_CREATOR_INDEX_ID);
+
+        // 🔧 NEW: Extract and store total results from API response
+        const brandIndexId = process.env.NEXT_PUBLIC_BRAND_INDEX_ID;
+        const creatorIndexId = process.env.NEXT_PUBLIC_CREATOR_INDEX_ID;
+
+        let totalBrands = 0;
+        let totalCreators = 0;
+
+        // Extract total results from pageInfoByIndex
+        if (response.data.pageInfoByIndex) {
+          const pageInfo = response.data.pageInfoByIndex;
+          totalBrands = pageInfo[brandIndexId!]?.total_results || 0;
+          totalCreators = pageInfo[creatorIndexId!]?.total_results || 0;
+        }
+
+        const totalAll = totalBrands + totalCreators;
+
+        console.log('🔍 Total results from API:');
+        console.log('  - Total all:', totalAll);
+        console.log('  - Total brands:', totalBrands);
+        console.log('  - Total creators:', totalCreators);
+        console.log('  - Page info:', response.data.pageInfoByIndex);
+
+        setTotalResults({
+          all: totalAll,
+          brands: totalBrands,
+          creators: totalCreators
+        });
+
+        // 🔧 PERFORMANCE FIX: Single state update
+        setEnhancedResults(allResults);
+        setCurrentPage(1);
+        setNextPageTokens(response.data.nextPageTokens || {});
+
+        // Use server's hasMore information if available, otherwise fallback to client logic
+        const serverHasMore = response.data.hasMore;
+        const clientHasMore = allResults.length >= itemsPerPage &&
+                             (brandResults.length === itemsPerPage || creatorResults.length === itemsPerPage);
+        const hasMore = serverHasMore !== undefined ? serverHasMore : clientHasMore;
+
+        setHasMoreResults(hasMore);
+
+        console.log('🔍 Pagination state set:');
+        console.log('  - Current page:', 1);
+        console.log('  - Items per page:', itemsPerPage);
+        console.log('  - Server hasMore:', serverHasMore);
+        console.log('  - Client hasMore:', clientHasMore);
+        console.log('  - Final hasMore:', hasMore);
+        console.log('  - Brand results count:', brandResults.length);
+        console.log('  - Creator results count:', creatorResults.length);
 
         // Fetch video details for all results
         await fetchVideoDetailsForResults(allResults);
@@ -273,8 +519,8 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
 
 
   // Fetch video details for search results
-  const fetchVideoDetailsForResults = async (results: SearchResult[]) => {
-    console.log('🔍 fetchVideoDetailsForResults called with', results.length, 'results');
+  const fetchVideoDetailsForResults = async (results: SearchResult[], isLoadMore = false) => {
+    console.log('🔍 fetchVideoDetailsForResults called with', results.length, 'results, isLoadMore:', isLoadMore);
     try {
       const updatedResults = await Promise.all(
         results.map(async (result) => {
@@ -304,16 +550,23 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
         return;
       }
 
-      console.log('🔍 fetchVideoDetailsForResults completed, updating searchResults with', updatedResults.length, 'items');
-      setSearchResults(updatedResults);
+      if (!isLoadMore) {
+        // Only update enhancedResults for initial search, not for load more
+        console.log('🔍 fetchVideoDetailsForResults completed, updating enhancedResults with', updatedResults.length, 'items');
+        setEnhancedResults(updatedResults);
+      } else {
+        console.log('🔍 fetchVideoDetailsForResults completed for load more, not updating enhancedResults directly');
+      }
+
       return updatedResults;
     } catch (error) {
       console.error('Error fetching video details:', error);
       return null;
     }
   };
-  // Toggle a format filter (vertical/horizontal)
-  const toggleFormatFilter = (filter: FacetFilter) => {
+  // 🔧 PERFORMANCE FIX: Memoize format filter toggle
+  const toggleFormatFilter = useCallback((filter: FacetFilter) => {
+    console.log('🔍 toggleFormatFilter called:', filter);
     setActiveFilters(prev => {
       if (prev.includes(filter)) {
         return prev.filter(f => f !== filter);
@@ -321,11 +574,27 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
         return [...prev, filter];
       }
     });
-  };
+  }, []);
 
 
-  // Simple filtering - only apply format filters (vertical/horizontal)
-  const filteredResults = searchResults.filter(result => {
+  // 🔧 PERFORMANCE FIX: Memoize filtered results based on active filter and format filters
+  const filteredResults = useMemo(() => {
+    console.log('🔍 Filtering results - enhancedResults.length:', enhancedResults.length, 'activeFilter:', activeFilter, 'activeFilters:', activeFilters);
+
+    let results = enhancedResults;
+
+    // Apply index-based filters (all/brands/creators)
+    if (activeFilter !== 'all') {
+      const brandIndexId = process.env.NEXT_PUBLIC_BRAND_INDEX_ID;
+      const creatorIndexId = process.env.NEXT_PUBLIC_CREATOR_INDEX_ID;
+
+      results = results.filter(result => {
+        if (activeFilter === 'brands') return result.index_id === brandIndexId;
+        if (activeFilter === 'creators') return result.index_id === creatorIndexId;
+        return true;
+      });
+    }
+
     // Apply format filters (vertical/horizontal)
     if (activeFilters.length > 0) {
       const formatFilters = activeFilters.filter(
@@ -333,17 +602,15 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
       );
 
       if (formatFilters.length > 0) {
-        if (!result.format) {
-          return false;
-        }
-        if (!formatFilters.includes(result.format)) {
-          return false;
-        }
+        results = results.filter(result => {
+          if (!result.format) return false;
+          return formatFilters.includes(result.format);
+        });
       }
     }
 
-    return true;
-  });
+    return results;
+  }, [enhancedResults, activeFilter, activeFilters]);
 
 
   // Handle crop completion
@@ -406,7 +673,7 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
 
       // Automatically search with the cropped image
       setIsSearching(true);
-      setSearchResults([]);
+      setEnhancedResults([]);
       setHasSearched(true); // Mark that a search has been performed
 
       try {
@@ -433,10 +700,29 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
             }
           });
 
-          setAllResults(allResults);
-          setBrandResults(brandResults);
-          setCreatorResults(creatorResults);
-          setSearchResults(allResults); // Default to showing all results
+          // 🔧 NEW: Extract total results for image search too
+          const brandIndexId = process.env.NEXT_PUBLIC_BRAND_INDEX_ID;
+          const creatorIndexId = process.env.NEXT_PUBLIC_CREATOR_INDEX_ID;
+
+          let totalBrands = 0;
+          let totalCreators = 0;
+
+          if (response.data.pageInfoByIndex) {
+            const pageInfo = response.data.pageInfoByIndex;
+            totalBrands = pageInfo[brandIndexId!]?.total_results || 0;
+            totalCreators = pageInfo[creatorIndexId!]?.total_results || 0;
+          }
+
+          const totalAll = totalBrands + totalCreators;
+
+          setTotalResults({
+            all: totalAll,
+            brands: totalBrands,
+            creators: totalCreators
+          });
+
+          // 🔧 PERFORMANCE FIX: Single state update
+          setEnhancedResults(allResults);
 
           // Fetch video details
           fetchVideoDetailsForResults(allResults);
@@ -484,8 +770,8 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
     });
   };
 
-  // Get confidence class based on confidence level
-  const getConfidenceClass = (confidence: string) => {
+  // 🔧 PERFORMANCE FIX: Memoize confidence class function
+  const getConfidenceClass = useCallback((confidence: string) => {
     switch (confidence.toLowerCase()) {
       case 'high':
         return 'bg-green-500';
@@ -496,14 +782,22 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
       default:
         return 'bg-gray-500';
     }
-  };
+  }, []);
 
-  // Format time (seconds to MM:SS)
-  const formatTime = (seconds: number) => {
+  // 🔧 PERFORMANCE FIX: Memoize format time function
+  const formatTime = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, []);
+
+  // 🔧 PERFORMANCE FIX: Use useInView hook for infinite scroll trigger
+  useEffect(() => {
+    if (inView && !isLoadingMore && hasMoreResults) {
+      console.log('🔍 Intersection observer triggered - loading more results');
+      loadMoreResults();
+    }
+  }, [inView, isLoadingMore, hasMoreResults, loadMoreResults]);
 
   // Load default videos on initial load
   React.useEffect(() => {
@@ -612,7 +906,7 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
         </div>
 
         {/* Simple Filters */}
-        {searchResults.length > 0 && (
+        {enhancedResults.length > 0 && (
           <div className="mb-6">
             <h2 className="text-lg font-semibold mb-2">Filters</h2>
             <div className="flex flex-wrap gap-2">
@@ -626,11 +920,11 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 )}
               >
-                All ({allResults.length})
+                All ({totalResults.all > 0 ? totalResults.all : enhancedResults.length})
               </button>
 
               {/* Brand Results */}
-              {brandResults.length > 0 && (
+              {(totalResults.brands > 0 || enhancedResults.some(r => r.index_id === brandIndexId)) && (
                 <button
                   onClick={() => toggleFilter('brands')}
                   className={clsx(
@@ -640,12 +934,12 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   )}
                 >
-                  Brands ({brandResults.length})
+                  Brands ({totalResults.brands > 0 ? totalResults.brands : enhancedResults.filter(r => r.index_id === brandIndexId).length})
                 </button>
               )}
 
               {/* Creator Results */}
-              {creatorResults.length > 0 && (
+              {(totalResults.creators > 0 || enhancedResults.some(r => r.index_id === creatorIndexId)) && (
                 <button
                   onClick={() => toggleFilter('creators')}
                   className={clsx(
@@ -655,7 +949,7 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   )}
                 >
-                  Creators ({creatorResults.length})
+                  Creators ({totalResults.creators > 0 ? totalResults.creators : enhancedResults.filter(r => r.index_id === creatorIndexId).length})
                 </button>
               )}
 
@@ -716,23 +1010,19 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
             <div className="flex justify-center items-center h-64">
               <LoadingSpinner size="lg" />
             </div>
-          ) : searchResults.length > 0 ? (
+          ) : enhancedResults.length > 0 ? (
             <div>
               <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-semibold">
-                    Search Results ({filteredResults.length})
+                    Search Results ({totalResults.all > 0 ? totalResults.all : filteredResults.length})
                   </h2>
                   <span className="px-3 py-1 text-sm font-medium bg-blue-100 text-blue-800 rounded-full">
                     All Videos
                   </span>
                 </div>
                 <button
-                  onClick={() => {
-                    setSearchResults([]);
-                    setHasSearched(false);
-                    setActiveFilters([]);
-                  }}
+                  onClick={clearSearch}
                   className="text-sm text-gray-600 hover:text-gray-800 underline"
                 >
                   Clear Search
@@ -741,69 +1031,40 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {filteredResults.map((result, index) => (
-                  <div
+                  <VideoCard
                     key={`${result.video_id}-${result.start}-${index}`}
-                    className="relative rounded-lg overflow-hidden shadow-md cursor-pointer transform transition hover:scale-[1.02]"
-                    onClick={() => openVideoModal(result)}
-                  >
-                    {/* Thumbnail */}
-                    <div className="relative aspect-video">
-                      <img
-                        src={result.thumbnail_url}
-                        alt="Video thumbnail"
-                        className="w-full h-full object-cover"
-                      />
-
-                      {/* Confidence Badge */}
-                      <div className="absolute top-2 left-2">
-                        <span className={clsx(
-                          'px-2 py-1 text-xs font-bold text-white rounded-md',
-                          getConfidenceClass(result.confidence)
-                        )}>
-                          {result.confidence}
-                        </span>
-                      </div>
-
-                      {/* Index Badge */}
-                      <div className="absolute top-2 right-2">
-                        <span className={clsx(
-                          'px-2 py-1 text-xs font-bold text-white rounded-md',
-                          result.index_id === brandIndexId ? 'bg-purple-600' : 'bg-green-600'
-                        )}>
-                          {result.index_id === brandIndexId ? 'Brand' : 'Creator'}
-                        </span>
-                      </div>
-
-                      {/* Time Range */}
-                      <div className="absolute bottom-2 right-2">
-                        <span className="px-2 py-1 text-xs font-bold text-white bg-black bg-opacity-60 rounded-md">
-                          {formatTime(result.start)} - {formatTime(result.end)}
-                        </span>
-                      </div>
-
-                      {/* Format Badge (if available) */}
-                      {result.format && (
-                        <div className="absolute bottom-2 left-2">
-                          <span className={clsx(
-                            'px-2 py-1 text-xs font-bold text-white rounded-md bg-gray-700',
-                          )}>
-                            {result.format === 'vertical' ? 'Vertical' : 'Horizontal'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Title */}
-                    <div className="p-2">
-                      <h3 className="text-sm font-medium truncate">
-                        {result.videoDetails?.system_metadata?.filename ||
-                         result.videoDetails?.system_metadata?.video_title ||
-                         `Video ${result.video_id}`}
-                      </h3>
-                    </div>
-                  </div>
+                    result={result}
+                    index={index}
+                    brandIndexId={brandIndexId}
+                    onVideoClick={openVideoModal}
+                    formatTime={formatTime}
+                    getConfidenceClass={getConfidenceClass}
+                  />
                 ))}
               </div>
+
+              {/* Infinite Scroll Trigger */}
+              {hasMoreResults && (
+                <div ref={observerRef} className="mt-8 flex justify-center">
+                  {isLoadingMore ? (
+                    <div className="flex items-center gap-2 px-6 py-3 text-gray-600">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                      Loading more results...
+                    </div>
+                  ) : (
+                    <div className="text-gray-400 text-sm">
+                      Scroll down to load more results
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* No more results indicator */}
+              {!hasMoreResults && enhancedResults.length > 0 && (
+                <div className="mt-8 text-center py-4 text-gray-500">
+                  End of results - {enhancedResults.length} videos found
+                </div>
+              )}
             </div>
           ) : hasSearched ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-500">

@@ -6,6 +6,7 @@ interface SearchRequest {
   query: string;
   scope: 'brand' | 'creator' | 'all';
   page_limit?: number;
+  page?: number;
 }
 
 interface SearchResult {
@@ -49,7 +50,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { query, scope, page_limit = 12 }: SearchRequest = await request.json();
+    const { query, scope, page_limit = 12, page = 1 }: SearchRequest = await request.json();
+
+    console.log('🔍 API Search Request:');
+    console.log('  - Query:', query);
+    console.log('  - Scope:', scope);
+    console.log('  - Page limit:', page_limit);
+    console.log('  - Page:', page);
 
     if (!query) {
       return NextResponse.json(
@@ -59,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine which indices to search based on scope
-    const indicesToSearch = 
+    const indicesToSearch =
       scope === 'all' ? [brandIndexId, creatorIndexId] :
       scope === 'brand' ? [brandIndexId] :
       scope === 'creator' ? [creatorIndexId] : [];
@@ -75,7 +82,7 @@ export async function POST(request: NextRequest) {
     const retryApiCall = async (indexId: string, retryCount = 0): Promise<any> => {
       const maxRetries = 2;
       const retryDelay = 1000 * (retryCount + 1); // 1s, 2s delays
-      
+
       try {
         const searchDataForm = new FormData();
         searchDataForm.append("search_options", "visual");
@@ -83,6 +90,7 @@ export async function POST(request: NextRequest) {
         searchDataForm.append("group_by", "clip");
         searchDataForm.append("sort_option", "score");
         searchDataForm.append("page_limit", page_limit.toString());
+        searchDataForm.append("page", page.toString());
         searchDataForm.append("index_id", indexId);
         searchDataForm.append("query_text", query);
 
@@ -99,7 +107,7 @@ export async function POST(request: NextRequest) {
 
         if (!response.ok) {
           const text = await response.text();
-          
+
           // Handle specific error cases
           if (response.status === 500 && retryCount < maxRetries) {
             console.log(`Retrying API call for index ${indexId} (attempt ${retryCount + 1}/${maxRetries + 1})`);
@@ -170,10 +178,26 @@ export async function POST(request: NextRequest) {
     // Sort merged results by score in descending order
     mergedResults.sort((a, b) => b.score - a.score);
 
+    console.log('🔍 API Search Response:');
+    console.log('  - Total merged results:', mergedResults.length);
+    console.log('  - Page info by index:', pageInfoByIndex);
+    console.log('  - First result:', mergedResults[0] ? {
+      video_id: mergedResults[0].video_id,
+      index_id: mergedResults[0].index_id,
+      score: mergedResults[0].score
+    } : null);
+
     // Return the search results as a JSON response
     return NextResponse.json({
       pageInfoByIndex,
       data: mergedResults,
+      hasMore: Object.values(pageInfoByIndex).some((pageInfo: any) => pageInfo.next_page_token),
+      nextPageTokens: Object.fromEntries(
+        Object.entries(pageInfoByIndex).map(([indexId, pageInfo]: [string, any]) => [
+          indexId,
+          pageInfo.next_page_token || null
+        ])
+      )
     });
   } catch (error: unknown) {
     // Attempt to extract meaningful status/message information
