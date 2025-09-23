@@ -132,11 +132,8 @@ interface VideoDetails {
 type FormatFilter = 'vertical' | 'horizontal';
 type FacetFilter = FormatFilter;
 
-interface SemanticSearchPageProps {
-  description?: string;
-}
-
-export default function SemanticSearchPage({ description }: SemanticSearchPageProps) {
+export default function SemanticSearchPage() {
+  const description: string | undefined = undefined;
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [enhancedResults, setEnhancedResults] = useState<SearchResult[]>([]);
