@@ -577,7 +577,7 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
   }, []);
 
 
-  // 🔧 PERFORMANCE FIX: Memoize filtered results based on active filter and format filters
+  // 🔧 PERFORMANCE FIX: Memoize filtered and sorted results
   const filteredResults = useMemo(() => {
     console.log('🔍 Filtering results - enhancedResults.length:', enhancedResults.length, 'activeFilter:', activeFilter, 'activeFilters:', activeFilters);
 
@@ -609,7 +609,27 @@ export default function SemanticSearchPage({ description }: SemanticSearchPagePr
       }
     }
 
-    return results;
+    // 🔧 NEW: Sort by confidence (high -> medium -> low) and then by score
+    return results.sort((a, b) => {
+      // Define confidence priority (higher number = higher priority)
+      const getConfidencePriority = (confidence: string) => {
+        switch (confidence.toLowerCase()) {
+          case 'high': return 3;
+          case 'medium': return 2;
+          case 'low': return 1;
+          default: return 0;
+        }
+      };
+
+      const confidenceDiff = getConfidencePriority(b.confidence) - getConfidencePriority(a.confidence);
+
+      // If confidence is the same, sort by score (higher score first)
+      if (confidenceDiff === 0) {
+        return (b.score || 0) - (a.score || 0);
+      }
+
+      return confidenceDiff;
+    });
   }, [enhancedResults, activeFilter, activeFilters]);
 
 
