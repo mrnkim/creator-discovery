@@ -3,26 +3,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import clsx from 'clsx';
+import { VideoData } from '@/types';
+
+type AdminVideo = {
+  _id: string;
+  hls?: { video_url?: string; thumbnail_urls?: string[] };
+  system_metadata?: { filename?: string; video_title?: string; duration?: number };
+  index_id: string;
+};
 
 export default function AdminPage() {
-  const [videoId, setVideoId] = useState('');
-  const [indexId, setIndexId] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analyzingVideoId, setAnalyzingVideoId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isBulkAnalyzing, setIsBulkAnalyzing] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
-  const [videos, setVideos] = useState<Array<{ _id: string; hls?: { video_url?: string; thumbnail_urls?: string[] }; system_metadata?: { filename?: string; video_title?: string; duration?: number }; index_id: string }>>([]);
+  const [videos, setVideos] = useState<AdminVideo[]>([]);
   const [filter, setFilter] = useState<'all' | 'brand' | 'creator'>('all');
   const [search, setSearch] = useState('');
 
   const brandIndexId = process.env.NEXT_PUBLIC_BRAND_INDEX_ID || '';
   const creatorIndexId = process.env.NEXT_PUBLIC_CREATOR_INDEX_ID || '';
-
-  useEffect(() => {
-    setIndexId(creatorIndexId || brandIndexId || '');
-  }, [brandIndexId, creatorIndexId]);
 
   // Fetch videos from both indices
   useEffect(() => {
@@ -32,12 +33,22 @@ export default function AdminPage() {
       setMessage(null);
       try {
         const [brandRes, creatorRes] = await Promise.all([
-          brandIndexId ? axios.get('/api/videos', { params: { index_id: brandIndexId, limit: 50, page: 1 } }) : Promise.resolve({ data: { data: [] } }),
-          creatorIndexId ? axios.get('/api/videos', { params: { index_id: creatorIndexId, limit: 50, page: 1 } }) : Promise.resolve({ data: { data: [] } }),
+          brandIndexId ? axios.get('/api/videos', { params: { index_id: brandIndexId, limit: 50, page: 1 } }) : Promise.resolve({ data: { data: [] as VideoData[] } }),
+          creatorIndexId ? axios.get('/api/videos', { params: { index_id: creatorIndexId, limit: 50, page: 1 } }) : Promise.resolve({ data: { data: [] as VideoData[] } }),
         ]);
 
-        const bItems = (brandRes.data?.data || []).map((v: any) => ({ ...v, index_id: brandIndexId }));
-        const cItems = (creatorRes.data?.data || []).map((v: any) => ({ ...v, index_id: creatorIndexId }));
+        const bItems: AdminVideo[] = ((brandRes.data?.data as VideoData[]) || []).map((v: VideoData) => ({
+          _id: v._id,
+          hls: v.hls,
+          system_metadata: v.system_metadata,
+          index_id: brandIndexId,
+        }));
+        const cItems: AdminVideo[] = ((creatorRes.data?.data as VideoData[]) || []).map((v: VideoData) => ({
+          _id: v._id,
+          hls: v.hls,
+          system_metadata: v.system_metadata,
+          index_id: creatorIndexId,
+        }));
         setVideos([...bItems, ...cItems]);
       } catch (err: unknown) {
         setMessage(err instanceof Error ? err.message : 'Failed to fetch videos');
@@ -63,13 +74,12 @@ export default function AdminPage() {
   }, [videos, filter, search, brandIndexId, creatorIndexId]);
 
   const triggerAnalyze = async (vid?: string, idx?: string) => {
-    const useVideoId = vid ?? videoId;
-    const useIndexId = idx ?? indexId;
+    const useVideoId = vid;
+    const useIndexId = idx;
     if (!useVideoId || !useIndexId) {
       setMessage('Please enter both video ID and index ID.');
       return;
     }
-    setIsAnalyzing(true);
     setAnalyzingVideoId(useVideoId);
     setMessage(null);
     try {
@@ -87,7 +97,6 @@ export default function AdminPage() {
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : 'Failed to trigger analysis');
     } finally {
-      setIsAnalyzing(false);
       setAnalyzingVideoId(null);
     }
   };
@@ -193,7 +202,7 @@ export default function AdminPage() {
               <label className="text-sm">Filter:</label>
               <select
                 value={filter}
-                onChange={(e) => setFilter(e.target.value as any)}
+                onChange={(e) => setFilter(e.target.value as 'all' | 'brand' | 'creator')}
                 className="px-2 py-1 border rounded"
               >
                 <option value="all">All</option>
