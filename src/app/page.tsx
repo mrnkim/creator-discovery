@@ -44,23 +44,16 @@ export default function Home() {
     }
   ];
 
-  const getActiveTabDescription = () => {
-    const activeTabData = tabs.find(tab => tab.id === activeTab);
-    return activeTabData?.description || '';
-  };
-
   const renderActiveTab = () => {
-    const description = getActiveTabDescription();
-
     switch (activeTab) {
       case 'creator-brand-match':
-        return <CreatorBrandMatch description={description} />;
+        return <CreatorBrandMatch />;
       case 'brand-mention-detection':
-        return <BrandMentionDetection description={description} />;
+        return <BrandMentionDetection />;
       case 'semantic-search':
-        return <SemanticSearch description={description} />;
+        return <SemanticSearch />;
       default:
-        return <CreatorBrandMatch description={description} />;
+        return <CreatorBrandMatch />;
     }
   };
 
