@@ -24,13 +24,11 @@ type VideoAnalysis = {
   [key: string]: unknown;
 };
 
-interface BrandMentionDetectionProps {
-  description?: string;
-}
-
-export default function BrandMentionDetectionPage({ description }: BrandMentionDetectionProps) {
+export default function BrandMentionDetectionPage() {
   // Environment variables
   const creatorIndexId = process.env.NEXT_PUBLIC_CREATOR_INDEX_ID || '';
+  // Optional description content for the page (not provided via props in App Router)
+  const description: string | undefined = undefined;
 
   // Video and event data
   const [videos, setVideos] = useState<VideoData[]>([]);
