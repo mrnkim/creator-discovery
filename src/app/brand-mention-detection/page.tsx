@@ -63,8 +63,8 @@ export default function BrandMentionDetectionPage() {
     title: string;
     start: number;
     end: number;
-    bbox?: { x: number; y: number; w: number; h: number };
     description?: string;
+    location?: string;
   } | null>(null);
 
   // Derived data
@@ -644,14 +644,22 @@ export default function BrandMentionDetectionPage() {
       assignedEvent: event
     });
 
+    console.log('🔍 Setting modal video with event:', {
+      brand: event.brand,
+      product_name: event.product_name,
+      description: event.description,
+      location: event.location,
+      hasLocation: !!event.location
+    });
+
     setModalVideo({
       videoId: selectedVideoId!,
       videoUrl: video.hls.video_url,
       title: `${event.brand}: ${event.product_name}`,
       start: finalStart,
       end: finalEnd,
-      bbox: event.bbox_norm,
-      description: event.description
+      description: event.description,
+      location: event.location
     });
   }
 
@@ -1358,9 +1366,8 @@ export default function BrandMentionDetectionPage() {
           title={modalVideo.title}
           startTime={modalVideo.start}
           endTime={modalVideo.end}
-          bboxNorm={modalVideo.bbox}
-          showOverlay={true}
           description={modalVideo.description}
+          location={modalVideo.location}
         />
       )}
     </div>

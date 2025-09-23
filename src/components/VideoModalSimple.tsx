@@ -15,9 +15,8 @@ interface VideoModalProps {
   contentMetadata?: VideoData;
   startTime?: number;
   endTime?: number;
-  bboxNorm?: { x: number; y: number; w: number; h: number };
-  showOverlay?: boolean;
   description?: string;
+  location?: string;
 }
 
 const VideoModalSimple: React.FC<VideoModalProps> = ({
@@ -27,15 +26,14 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
   title,
   startTime,
   endTime,
-  bboxNorm,
-  showOverlay,
   description,
+  location,
 }) => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(true); // Start muted by default
   const [volume, setVolume] = useState<number>(1); // Volume state
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [currentTime, setCurrentTime] = useState<number>(0);
+
 
 
 
@@ -122,6 +120,11 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
                 {description}
               </div>
             )}
+            {location && (
+              <div className="text-sm text-blue-600 mb-2">
+                📍 {location}
+              </div>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -152,8 +155,6 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
     }}
     onTimeUpdate={(e) => {
       const video = e.currentTarget;
-      setCurrentTime(video.currentTime);
-
       if (endTime !== undefined && video.currentTime >= endTime) {
         video.currentTime = startTime || 0;
       }
@@ -173,19 +174,7 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
     }}
     controlsList="nodownload"
   />
-            {/* Bounding box overlay - only show during the segment */}
-            {showOverlay && bboxNorm && startTime !== undefined && endTime !== undefined &&
-    currentTime >= startTime && currentTime <= endTime && (
-      <div
-        className="absolute border-2 border-red-500 rounded bg-red-500/20"
-        style={{
-          left: `${bboxNorm.x}%`,
-          top: `${bboxNorm.y}%`,
-          width: `${bboxNorm.w}%`,
-          height: `${bboxNorm.h}%`,
-        }}
-      />
-    )}
+
 </div>
 
           {/* Segment info below video player */}

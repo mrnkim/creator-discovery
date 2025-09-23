@@ -12,13 +12,8 @@ export interface ProductEvent {
   price?: string;
   timeline_start: number;
   timeline_end: number;
-  bbox_norm: {
-    x: number; // x position as percentage (0-100)
-    y: number; // y position as percentage (0-100)
-    w: number; // width as percentage (0-100)
-    h: number; // height as percentage (0-100)
-  };
   description?: string;
+  location?: string;
   source: 'analyze';
 }
 
@@ -33,13 +28,8 @@ export const ProductEventSchema = z.object({
   price: z.string().optional(),
   timeline_start: z.number().nonnegative(),
   timeline_end: z.number().nonnegative(),
-  bbox_norm: z.object({
-    x: z.number().min(0).max(100),
-    y: z.number().min(0).max(100),
-    w: z.number().min(0).max(100),
-    h: z.number().min(0).max(100)
-  }),
   description: z.string().optional(),
+  location: z.string().optional(),
   source: z.literal('analyze')
 });
 

@@ -4,9 +4,6 @@ import { ProductEvent, ProductEventArraySchema, VideoAnalysisMetadata, VideoAnal
 const API_KEY = process.env.TWELVELABS_API_KEY;
 const TWELVELABS_API_BASE_URL = process.env.TWELVELABS_API_BASE_URL;
 
-// Maximum gap in seconds between events to be considered for merging
-const MAX_GAP_SECONDS = 0.1;
-
 interface AnalyzeRequest {
   videoId: string;
   indexId: string;
@@ -70,7 +67,7 @@ export async function POST(request: NextRequest) {
           "brand": "BrandName",
           "product_name": "Product Name",
           "timeline": [start_seconds, end_seconds],
-          "location": [x_percent, y_percent, width_percent, height_percent],
+          "location": "detailed location description",
           "description": "brief factual description"
         }
       ],
@@ -82,10 +79,16 @@ export async function POST(request: NextRequest) {
     Rules for products:
     - Analyze 0–25%, 25–75%, and 75–100% of the video.
     - Only include products with visible logos/branding.
-    - Use numbers for timeline & location (0–100 for percentages).
+    - Use numbers for timeline (0–100 for percentages).
     - If no products, use [].
     - Create separate entries for repeated brand appearances.
     - Timeline = when the logo is clearly visible (tight bounds).
+
+    LOCATION RULES (detailed positioning):
+    - Describe EXACTLY where the brand/logo appears in the frame (e.g., "top-left corner", "center of screen", "bottom-right", "on person's shirt", "on product packaging", "in background", "on vehicle", "on building sign").
+    - Include screen position (left/center/right, top/middle/bottom) and relative size (small/medium/large).
+    - Mention if it's on a person, object, background, or foreground.
+    - Be specific about the visual context (e.g., "logo on athlete's jersey", "brand name on coffee cup", "signage in background").
 
     TIGHT TIMELINE RULES (micro-segmentation):
     - Default max segment length: **≤ 8 seconds**. If visibility continues longer, **split into multiple entries**.
@@ -95,12 +98,6 @@ export async function POST(request: NextRequest) {
     - Never output a single wide range like **[0, videoDuration]** unless the logo is truly visible **continuously** the whole time (otherwise, split).
     - Round to integers; ensure **end > start**. If unsure, **err on the shorter side** (do not pad).
     - Skip ultra-brief flashes **< 1 second**.
-
-    Location (bounding box of the **logo area**, not the whole object):
-    - [x, y, width, height] are percentages (0–100). Round to integers.
-    - **Never use 0** for width/height; enforce **width ≥ 3, height ≥ 3**. If smaller, omit that product.
-    - Keep descriptions brief and objective.
-    - Check brands on cars, barriers, clothing, equipment, signage, packaging, buildings, etc.
 
     Rules for tones (pick 1–3):
     aspirational, playful, gritty, cozy, ironic, energetic, professional, casual, dramatic, humorous, serious, romantic, adventurous, nostalgic, futuristic, minimalist, bold, subtle, confident, mysterious
@@ -115,9 +112,9 @@ export async function POST(request: NextRequest) {
     REFERENCE EXAMPLE (FORMAT ONLY; DO NOT COPY VALUES):
     {
       "products": [
-        { "brand": "Emirates", "product_name": "Sailboat Livery", "timeline": [12, 16], "location": [18, 22, 12, 8], "description": "logo on sail during close pass" },
-        { "brand": "Emirates", "product_name": "Sailboat Livery", "timeline": [44, 48], "location": [24, 30, 10, 7], "description": "logo visible mid-race" },
-        { "brand": "Emirates", "product_name": "Sailboat Livery", "timeline": [102, 107], "location": [20, 26, 11, 9], "description": "logo shown in finish segment" }
+        { "brand": "Emirates", "product_name": "Sailboat Livery", "timeline": [12, 16], "location": "logo prominently displayed on sail in center of frame", "description": "logo on sail during close pass" },
+        { "brand": "Emirates", "product_name": "Sailboat Livery", "timeline": [44, 48], "location": "brand name visible on boat hull in bottom-right corner", "description": "logo visible mid-race" },
+        { "brand": "Emirates", "product_name": "Sailboat Livery", "timeline": [102, 107], "location": "logo on sail clearly visible in center-left of screen", "description": "logo shown in finish segment" }
       ],
       "tones": ["energetic", "confident"],
       "styles": ["documentary", "lifestyle"],
@@ -263,12 +260,11 @@ export async function POST(request: NextRequest) {
       // Type guard for item properties
       const eventItem = item as Record<string, unknown>;
       const timeline = Array.isArray(eventItem.timeline) ? eventItem.timeline : [0, 0];
-      const location = Array.isArray(eventItem.location) ? eventItem.location : [0, 0, 0, 0];
 
       console.log(`🔍 Parsing event ${index} for video ${videoId}:`, {
         original_item: eventItem,
         timeline: timeline,
-        location: location
+        location: eventItem.location
       });
 
       return {
@@ -277,13 +273,8 @@ export async function POST(request: NextRequest) {
         product_name: typeof eventItem.product_name === 'string' ? eventItem.product_name : 'Unknown Product',
         timeline_start: typeof timeline[0] === 'number' ? timeline[0] : 0,
         timeline_end: typeof timeline[1] === 'number' ? timeline[1] : 0,
-        bbox_norm: {
-          x: typeof location[0] === 'number' ? location[0] : 0,
-          y: typeof location[1] === 'number' ? location[1] : 0,
-          w: typeof location[2] === 'number' ? location[2] : 0,
-          h: typeof location[3] === 'number' ? location[3] : 0
-        },
         description: typeof eventItem.description === 'string' ? eventItem.description : '',
+        location: typeof eventItem.location === 'string' ? eventItem.location : '',
         source: 'analyze' as const
       };
     });
@@ -365,67 +356,4 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Deduplicates product events by merging overlapping events for the same brand and product
- */
-function deduplicateEvents(events: ProductEvent[]): ProductEvent[] {
-  // Group events by brand and product name
-  const groupedEvents: Record<string, ProductEvent[]> = {};
-
-  for (const event of events) {
-    const key = `${event.brand}|${event.product_name}`;
-    if (!groupedEvents[key]) {
-      groupedEvents[key] = [];
-    }
-    groupedEvents[key].push(event);
-  }
-
-  const deduplicatedEvents: ProductEvent[] = [];
-
-  // Process each group
-  for (const key in groupedEvents) {
-    const group = groupedEvents[key];
-
-    // Sort by start time
-    group.sort((a, b) => a.timeline_start - b.timeline_start);
-
-    let currentEvent = { ...group[0] };
-    let longestDuration = currentEvent.timeline_end - currentEvent.timeline_start;
-
-    for (let i = 1; i < group.length; i++) {
-      const nextEvent = group[i];
-
-      // Check if events overlap or are close enough to merge
-      if (nextEvent.timeline_start <= currentEvent.timeline_end + MAX_GAP_SECONDS) {
-        // Merge events
-        currentEvent.timeline_end = Math.max(currentEvent.timeline_end, nextEvent.timeline_end);
-
-        // Keep bbox from the longest segment
-        const nextDuration = nextEvent.timeline_end - nextEvent.timeline_start;
-        if (nextDuration > longestDuration) {
-          currentEvent.bbox_norm = nextEvent.bbox_norm;
-          longestDuration = nextDuration;
-        }
-
-        // Merge descriptions if they differ
-        if (nextEvent.description &&
-            nextEvent.description !== currentEvent.description &&
-            currentEvent.description) {
-          currentEvent.description = `${currentEvent.description}; ${nextEvent.description}`;
-        } else if (nextEvent.description && !currentEvent.description) {
-          currentEvent.description = nextEvent.description;
-        }
-      } else {
-        // Current event is complete, add it to results and start a new one
-        deduplicatedEvents.push(currentEvent);
-        currentEvent = { ...nextEvent };
-        longestDuration = currentEvent.timeline_end - currentEvent.timeline_start;
-      }
-    }
-
-    // Add the last event
-    deduplicatedEvents.push(currentEvent);
-  }
-
-  return deduplicatedEvents;
-}
+// deduplicateEvents was removed: we preserve individual segments to reflect micro-segmentation

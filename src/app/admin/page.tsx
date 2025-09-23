@@ -11,6 +11,8 @@ export default function AdminPage() {
   const [analyzingVideoId, setAnalyzingVideoId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isBulkAnalyzing, setIsBulkAnalyzing] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
   const [videos, setVideos] = useState<Array<{ _id: string; hls?: { video_url?: string; thumbnail_urls?: string[] }; system_metadata?: { filename?: string; video_title?: string; duration?: number }; index_id: string }>>([]);
   const [filter, setFilter] = useState<'all' | 'brand' | 'creator'>('all');
   const [search, setSearch] = useState('');
@@ -90,10 +92,95 @@ export default function AdminPage() {
     }
   };
 
+  const triggerBulkAnalyze = async () => {
+    if (!creatorIndexId) {
+      setMessage('Creator index ID is not configured.');
+      return;
+    }
+
+    const creatorVideos = videos.filter(v => v.index_id === creatorIndexId);
+    if (creatorVideos.length === 0) {
+      setMessage('No creator videos found to analyze.');
+      return;
+    }
+
+    setIsBulkAnalyzing(true);
+    setBulkProgress({ current: 0, total: creatorVideos.length });
+    setMessage(null);
+
+    try {
+      for (let i = 0; i < creatorVideos.length; i++) {
+        const video = creatorVideos[i];
+        setBulkProgress({ current: i + 1, total: creatorVideos.length });
+
+        try {
+          await axios.post('/api/brand-mentions/analyze', {
+            videoId: video._id,
+            indexId: video.index_id,
+            force: true,
+            segmentAnalysis: true,
+          });
+          console.log(`✅ Analyzed video ${i + 1}/${creatorVideos.length}: ${video._id}`);
+        } catch (error) {
+          console.error(`❌ Failed to analyze video ${video._id}:`, error);
+          // Continue with next video instead of stopping
+        }
+
+        // Add a small delay to avoid overwhelming the API
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+
+      setMessage(`Bulk analysis completed! Processed ${creatorVideos.length} creator videos.`);
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : 'Failed to complete bulk analysis');
+    } finally {
+      setIsBulkAnalyzing(false);
+      setBulkProgress({ current: 0, total: 0 });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white">
       <main className="container mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold mb-6">Admin</h1>
+
+        {/* Bulk Analysis Section */}
+        <div className="mb-6 p-4 border rounded-lg bg-blue-50">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold mb-2">Bulk Analysis</h2>
+              <p className="text-sm text-gray-600">
+                Re-analyze all creator videos to get updated location data
+              </p>
+              {isBulkAnalyzing && (
+                <div className="mt-2">
+                  <div className="text-sm text-blue-600">
+                    Progress: {bulkProgress.current} / {bulkProgress.total} videos
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={triggerBulkAnalyze}
+              disabled={isBulkAnalyzing || !creatorIndexId}
+              className={clsx(
+                'px-4 py-2 rounded font-medium',
+                isBulkAnalyzing || !creatorIndexId
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              )}
+            >
+              {isBulkAnalyzing ? 'Analyzing...' : 'Re-analyze All Creators'}
+            </button>
+          </div>
+        </div>
+
         {/* Message */}
         {message && (
           <div className="mb-4 text-sm text-green-700">{message}</div>
