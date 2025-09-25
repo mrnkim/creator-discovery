@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useRef, useEffect } from "react";
+import React, { Suspense, useRef, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ErrorBoundary } from "react-error-boundary";
 import ErrorFallback from "./ErrorFallback";
@@ -18,67 +18,38 @@ interface HLSVideoPlayerProps {
 const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({ videoUrl, className }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const [isVideoReady, setIsVideoReady] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoUrl) return;
 
-    console.log('🎬 HLS: Initializing HLS player with URL:', videoUrl);
+    setIsVideoReady(false);
 
-    // Add multiple event listeners for debugging
+    // Add video click handler
     const handleVideoClick = (e: Event) => {
-      console.log('🎬 HLS: Video clicked via event listener', e.target);
-      console.log('🎬 HLS: Video element:', video);
-      console.log('🎬 HLS: Video paused:', video.paused);
-      console.log('🎬 HLS: Video readyState:', video.readyState);
-
       if (video.paused) {
-        console.log('🎬 HLS: Attempting to play video');
-        video.play().then(() => {
-          console.log('🎬 HLS: Video play successful');
-        }).catch(err => {
-          console.error('🎬 HLS: Play error:', err);
+        video.play().catch(err => {
+          console.error('Video play error:', err);
         });
       } else {
-        console.log('🎬 HLS: Attempting to pause video');
         video.pause();
-        console.log('🎬 HLS: Video paused');
       }
     };
 
-    const handleMouseDown = (e: Event) => {
-      console.log('🎬 HLS: Mouse down on video', e.target);
-    };
-
-    const handleMouseUp = (e: Event) => {
-      console.log('🎬 HLS: Mouse up on video', e.target);
-    };
-
-    const handlePointerEvents = (e: Event) => {
-      console.log('🎬 HLS: Pointer event:', e.type, e.target);
+    // Add video ready event listeners
+    const handleCanPlay = () => {
+      setIsVideoReady(true);
     };
 
     video.addEventListener('click', handleVideoClick);
-    video.addEventListener('mousedown', handleMouseDown);
-    video.addEventListener('mouseup', handleMouseUp);
-    video.addEventListener('pointerdown', handlePointerEvents);
-    video.addEventListener('pointerup', handlePointerEvents);
 
-    // Check video element properties
-    console.log('🎬 HLS: Video element properties:', {
-      controls: video.controls,
-      style: video.style.cssText,
-      className: video.className,
-      disabled: video.disabled,
-      readyState: video.readyState
-    });
+    video.addEventListener('canplay', handleCanPlay);
 
     // Check if HLS is supported natively
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      console.log('🎬 HLS: Using native HLS support');
       video.src = videoUrl;
     } else if (Hls.isSupported()) {
-      console.log('🎬 HLS: Using HLS.js library');
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
@@ -91,40 +62,30 @@ const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({ videoUrl, className }) 
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        console.log('🎬 HLS: Manifest parsed, video ready to play');
+        setIsVideoReady(true);
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
-        console.error('🎬 HLS Error:', data);
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.error('🎬 HLS: Fatal network error, trying to recover...');
               hls.startLoad();
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.error('🎬 HLS: Fatal media error, trying to recover...');
               hls.recoverMediaError();
               break;
             default:
-              console.error('🎬 HLS: Fatal error, cannot recover');
               hls.destroy();
               break;
           }
         }
       });
-    } else {
-      console.error('🎬 HLS: HLS is not supported in this browser');
     }
 
     return () => {
       video.removeEventListener('click', handleVideoClick);
-      video.removeEventListener('mousedown', handleMouseDown);
-      video.removeEventListener('mouseup', handleMouseUp);
-      video.removeEventListener('pointerdown', handlePointerEvents);
-      video.removeEventListener('pointerup', handlePointerEvents);
+      video.removeEventListener('canplay', handleCanPlay);
       if (hlsRef.current) {
-        console.log('🎬 HLS: Cleaning up HLS instance');
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
@@ -141,10 +102,19 @@ const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({ videoUrl, className }) 
         zIndex: 1
       }}
       onClick={(e) => {
-        console.log('🎬 HLS: Container clicked', e.target);
         e.stopPropagation();
       }}
     >
+      {/* Loading Spinner - shown until video is ready */}
+      {!isVideoReady && (
+        <div
+          className="absolute inset-0 flex items-center justify-center bg-gray-900 rounded-[45.60px]"
+          style={{ zIndex: 3 }}
+        >
+          <LoadingSpinner />
+        </div>
+      )}
+
       <video
         ref={videoRef}
         controls
@@ -156,18 +126,13 @@ const HLSVideoPlayer: React.FC<HLSVideoPlayerProps> = ({ videoUrl, className }) 
           cursor: 'pointer',
           position: 'relative',
           zIndex: 2,
-          pointerEvents: 'auto'
+          pointerEvents: 'auto',
+          opacity: isVideoReady ? 1 : 0
         }}
-        onLoadStart={() => console.log('🎬 HLS: Video load started')}
-        onLoadedMetadata={() => console.log('🎬 HLS: Video metadata loaded')}
-        onCanPlay={() => console.log('🎬 HLS: Video can play')}
         onError={(e) => {
-          console.error('🎬 HLS: Video error:', e);
-          console.error('🎬 HLS: Video element:', e.target);
+          console.error('Video error:', e);
         }}
-        onLoad={() => console.log('🎬 HLS: Video loaded successfully')}
         onClick={(e) => {
-          console.log('🎬 HLS: React onClick triggered', e.target);
           e.stopPropagation();
         }}
       />
@@ -209,29 +174,8 @@ const Video: React.FC<EnhancedVideoProps> = ({
     enabled: !!indexId && (!!videoId) && !providedVideoDetails,
   });
 
-  // Debug API response
-  if (videoDetails) {
-    console.log('🎬 Video details received:', videoDetails);
-  }
-  if (error) {
-    console.error('🎬 Video details error:', error);
-  }
-  if (isLoading) {
-    console.log('🎬 Video details loading...');
-  }
 
   const finalVideoDetails = providedVideoDetails || videoDetails;
-
-  // Debug logging for video data
-  console.log('🎬 Video component debug:', {
-    videoId,
-    indexId,
-    showPlayer,
-    hasVideoDetails: !!finalVideoDetails,
-    videoUrl: finalVideoDetails?.hls?.video_url,
-    thumbnailUrl: finalVideoDetails?.hls?.thumbnail_urls?.[0],
-    duration: finalVideoDetails?.system_metadata?.duration
-  });
 
   const formatDuration = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);

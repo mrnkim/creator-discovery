@@ -433,7 +433,7 @@ export default function CreatorBrandMatch() {
               </div>
             ) : (
               <div className="text-center text-gray-500 mt-8">
-                Select a video and click "Find Matches" to see results.
+                Select a video and click &quot;Find Matches&quot; to see results.
               </div>
             )}
           </div>

@@ -61,17 +61,15 @@ export async function fetchVideoDetails(
   embed: boolean = false
 ): Promise<VideoData> {
   try {
-    console.log('🎬 API: Fetching video details:', { videoId, indexId, embed });
     const response = await axios.get<VideoData>(`/api/videos/${videoId}`, {
       params: {
         indexId,
         embed: embed ? 'true' : undefined
       }
     });
-    console.log('🎬 API: Video details response:', response.data);
     return response.data;
   } catch (error) {
-    console.error(`🎬 API: Error fetching video details for ${videoId}:`, error);
+    console.error(`Error fetching video details for ${videoId}:`, error);
     throw error;
   }
 }
