@@ -74,7 +74,7 @@ export default function Home() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={clsx(
-                'block w-full text-left p-4 rounded-lg mb-2 transition-colors font-bold text-xl',
+                'block w-full text-left p-4 rounded-lg mb-2 transition-colors font-medium text-lg',
 
               )}
               style={{

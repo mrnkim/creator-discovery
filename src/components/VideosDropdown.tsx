@@ -44,12 +44,13 @@ const VideosDropDown: React.FC<VideosDropDownProps> = ({
   }
 
   return (
-    <div className="relative w-full max-w-lg mx-auto border rounded-lg">
+    <div className="relative w-full max-w-lg mx-auto border border-black rounded-lg">
       {/* Dropdown button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         disabled={!!selectedFile || !!taskId}
-        className="cursor-pointer w-full text-left bg-gray-100 rounded-3xl py-3 px-5 font-sans text-black text-lg relative"
+        className="cursor-pointer w-full text-left bg-gray-100 rounded-3xl py-3 px-5 text-black text-lg relative"
+        style={{ fontFamily: 'var(--font-sans)' }}
       >
         <div className="flex justify-between items-center">
           <div className="truncate pr-8">
@@ -76,7 +77,8 @@ const VideosDropDown: React.FC<VideosDropDownProps> = ({
               {page.data.map((video: VideoData) => (
                 <button
                   key={`${pageIndex}-${video._id}`}
-                  className={`cursor-pointer rounded-2xl text-left py-2 px-4 hover:bg-gray-100 last:border-0 font-sans w-full ${video._id === footageVideoId ? 'bg-gray-200' : ''}`}
+                  className={`cursor-pointer rounded-2xl text-left py-2 px-4 hover:bg-gray-100 last:border-0 w-full ${video._id === footageVideoId ? 'bg-gray-200' : ''}`}
+                  style={{ fontFamily: 'var(--font-sans)' }}
                   onClick={() => handleChange(video._id)}
                 >
                   <div className="text-md truncate">
