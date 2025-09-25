@@ -680,75 +680,88 @@ export default function SemanticSearchPage() {
     });
   };
 
-  // Apply crop and search
+
+  // Apply crop and search (or search with original if no crop)
   const applyCropAndSearch = async () => {
-    const croppedFile = await getCroppedImg();
-    if (croppedFile) {
+    let fileToSearch: File;
+
+    // Check if crop is applied
+    if (crop && crop.width && crop.height) {
+      // Use cropped image
+      const croppedFile = await getCroppedImg();
+      if (!croppedFile) return;
+
+      fileToSearch = croppedFile;
       setImageFile(croppedFile);
-      setIsCropModalOpen(false);
       setImageSrc(URL.createObjectURL(croppedFile));
+    } else {
+      // Use original image
+      if (!imageFile) return;
+      fileToSearch = imageFile;
+    }
 
-      // Automatically search with the cropped image
-      setIsSearching(true);
-      setEnhancedResults([]);
-      setHasSearched(true); // Mark that a search has been performed
+    setIsCropModalOpen(false);
 
-      try {
-        const formData = new FormData();
-        formData.append('scope', 'all');
-        formData.append('file', croppedFile);
+    // Search with the selected image (cropped or original)
+    setIsSearching(true);
+    setEnhancedResults([]);
+    setHasSearched(true); // Mark that a search has been performed
 
-        const response = await axios.post('/api/search/image', formData);
+    try {
+      const formData = new FormData();
+      formData.append('scope', 'all');
+      formData.append('file', fileToSearch);
 
-        if (response.data && response.data.data) {
-          // Separate results by index for image search too
-          const allResults: SearchResult[] = [];
-          const brandResults: SearchResult[] = [];
-          const creatorResults: SearchResult[] = [];
+      const response = await axios.post('/api/search/image', formData);
 
-          response.data.data.forEach((result: SearchResult) => {
-            allResults.push(result);
+      if (response.data && response.data.data) {
+        // Separate results by index for image search too
+        const allResults: SearchResult[] = [];
+        const brandResults: SearchResult[] = [];
+        const creatorResults: SearchResult[] = [];
 
-            // Check if result is from brand index or creator index
-            if (result.index_id === process.env.NEXT_PUBLIC_BRAND_INDEX_ID) {
-              brandResults.push(result);
-            } else if (result.index_id === process.env.NEXT_PUBLIC_CREATOR_INDEX_ID) {
-              creatorResults.push(result);
-            }
-          });
+        response.data.data.forEach((result: SearchResult) => {
+          allResults.push(result);
 
-          // 🔧 NEW: Extract total results for image search too
-          const brandIndexId = process.env.NEXT_PUBLIC_BRAND_INDEX_ID;
-          const creatorIndexId = process.env.NEXT_PUBLIC_CREATOR_INDEX_ID;
-
-          let totalBrands = 0;
-          let totalCreators = 0;
-
-          if (response.data.pageInfoByIndex) {
-            const pageInfo = response.data.pageInfoByIndex;
-            totalBrands = pageInfo[brandIndexId!]?.total_results || 0;
-            totalCreators = pageInfo[creatorIndexId!]?.total_results || 0;
+          // Check if result is from brand index or creator index
+          if (result.index_id === process.env.NEXT_PUBLIC_BRAND_INDEX_ID) {
+            brandResults.push(result);
+          } else if (result.index_id === process.env.NEXT_PUBLIC_CREATOR_INDEX_ID) {
+            creatorResults.push(result);
           }
+        });
 
-          const totalAll = totalBrands + totalCreators;
+        // Extract total results for image search too
+        const brandIndexId = process.env.NEXT_PUBLIC_BRAND_INDEX_ID;
+        const creatorIndexId = process.env.NEXT_PUBLIC_CREATOR_INDEX_ID;
 
-          setTotalResults({
-            all: totalAll,
-            brands: totalBrands,
-            creators: totalCreators
-          });
+        let totalBrands = 0;
+        let totalCreators = 0;
 
-          // 🔧 PERFORMANCE FIX: Single state update
-          setEnhancedResults(allResults);
-
-          // Fetch video details
-          fetchVideoDetailsForResults(allResults);
+        if (response.data.pageInfoByIndex) {
+          const pageInfo = response.data.pageInfoByIndex;
+          totalBrands = pageInfo[brandIndexId!]?.total_results || 0;
+          totalCreators = pageInfo[creatorIndexId!]?.total_results || 0;
         }
-      } catch (error) {
-        console.error('Error performing image search:', error);
-      } finally {
-        setIsSearching(false);
+
+        const totalAll = totalBrands + totalCreators;
+
+        setTotalResults({
+          all: totalAll,
+          brands: totalBrands,
+          creators: totalCreators
+        });
+
+        // Single state update
+        setEnhancedResults(allResults);
+
+        // Fetch video details
+        fetchVideoDetailsForResults(allResults);
       }
+    } catch (error) {
+      console.error('Error performing image search:', error);
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -1286,7 +1299,7 @@ export default function SemanticSearchPage() {
                 onClick={applyCropAndSearch}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
               >
-                Crop & Search
+                Search
               </button>
             </div>
           </div>
