@@ -816,7 +816,7 @@ export default function BrandMentionDetectionPage() {
 
 
   return (
-    <div className="bg-white">
+    <div className="bg-zinc-100">
       <main className="container mx-auto px-4 py-8">
         {/* Description */}
         {description && (
