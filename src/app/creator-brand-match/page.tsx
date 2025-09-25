@@ -325,63 +325,6 @@ export default function CreatorBrandMatch() {
           </div>
         </div>
 
-        {/* Video Selection Section */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold mb-4">
-            Select {sourceType === 'brand' ? 'Brand' : 'Creator'} Video
-          </h2>
-
-          {/* Video Dropdown */}
-          <div className="max-w-lg mx-auto">
-            <VideosDropDown
-              indexId={sourceIndexId}
-              onVideoChange={handleVideoChange}
-              videosData={videosData || { pages: [], pageParams: [] }}
-              fetchNextPage={fetchNextPage}
-              hasNextPage={!!hasNextPage}
-              isFetchingNextPage={isFetchingNextPage}
-              isLoading={isLoadingVideos}
-              selectedFile={null}
-              taskId={null}
-              footageVideoId={selectedVideoId}
-            />
-          </div>
-
-          {/* Selected Video Preview */}
-          {selectedVideoId && (
-            <div className="mt-6 flex justify-center">
-              <Video
-                videoId={selectedVideoId}
-                indexId={sourceIndexId}
-                showTitle={true}
-                onPlay={() => handleOpenVideoModal(selectedVideoId)}
-              />
-            </div>
-          )}
-
-          {/* Find Matches Button */}
-          <div className="mt-6 flex justify-center">
-            <button
-              onClick={handleFindMatches}
-              disabled={!selectedVideoId || isAnalyzing}
-              className={`px-6 py-3 rounded-lg font-semibold ${
-                !selectedVideoId || isAnalyzing
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
-              }`}
-            >
-              {isAnalyzing ? (
-                <span className="flex items-center">
-                  <LoadingSpinner size="sm" className="mr-2" />
-                  Finding Matches...
-                </span>
-              ) : (
-                'Find Matches'
-              )}
-            </button>
-          </div>
-        </div>
-
         {/* Processing Status Messages */}
         {isLoadingEmbeddings && showProcessingMessage && (
           <div className="max-w-3xl mx-auto mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
@@ -414,22 +357,87 @@ export default function CreatorBrandMatch() {
           </div>
         )}
 
-        {/* Results Section */}
-        {similarResults.length > 0 && (
-          <div className="mt-8">
+        {/* Main Content Layout - Left: Reference Video, Right: Results */}
+        <div className="flex gap-8">
+          {/* Left Side - Reference Video Selection */}
+          <div className="w-1/2">
             <h2 className="text-xl font-semibold mb-4">
-              {sourceType === 'brand' ? 'Creator' : 'Brand'} Matches
+              Select {sourceType === 'brand' ? 'Brand' : 'Creator'} Video
             </h2>
-            <SimilarVideoResults results={similarResults} indexId={targetIndexId} />
-          </div>
-        )}
 
-        {/* No Results Message */}
-        {!isAnalyzing && similarResults.length === 0 && embeddingsReady && (
-          <div className="mt-8 text-center text-gray-600">
-            No matching {sourceType === 'brand' ? 'creators' : 'brands'} found. Try selecting a different video.
+            {/* Video Dropdown */}
+            <div className="mb-6">
+              <VideosDropDown
+                indexId={sourceIndexId}
+                onVideoChange={handleVideoChange}
+                videosData={videosData || { pages: [], pageParams: [] }}
+                fetchNextPage={fetchNextPage}
+                hasNextPage={!!hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                isLoading={isLoadingVideos}
+                selectedFile={null}
+                taskId={null}
+                footageVideoId={selectedVideoId}
+              />
+            </div>
+
+            {/* Selected Video Preview */}
+            {selectedVideoId && (
+              <div className="flex justify-center">
+                <Video
+                  videoId={selectedVideoId}
+                  indexId={sourceIndexId}
+                  showTitle={true}
+                  onPlay={() => handleOpenVideoModal(selectedVideoId)}
+                  size="large"
+                  showPlayer={true}
+                />
+              </div>
+            )}
+
+            {/* Find Matches Button */}
+            <div className="flex justify-center">
+              <button
+                onClick={handleFindMatches}
+                disabled={!selectedVideoId || isAnalyzing}
+                className={`px-6 py-3 rounded-lg font-semibold ${
+                  !selectedVideoId || isAnalyzing
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {isAnalyzing ? (
+                  <span className="flex items-center">
+                    <LoadingSpinner size="sm" className="mr-2" />
+                    Finding Matches...
+                  </span>
+                ) : (
+                  'Find Matches'
+                )}
+              </button>
+            </div>
           </div>
-        )}
+
+          {/* Right Side - Search Results */}
+          <div className="w-1/2">
+            {similarResults.length > 0 ? (
+              <div>
+                <h2 className="text-xl font-semibold mb-4">
+                  {sourceType === 'brand' ? 'Creator' : 'Brand'} Matches
+                </h2>
+                <SimilarVideoResults results={similarResults} indexId={targetIndexId} />
+              </div>
+            ) : !isAnalyzing && embeddingsReady ? (
+              <div className="text-center text-gray-600 mt-8">
+                No matching {sourceType === 'brand' ? 'creators' : 'brands'} found. Try selecting a different video.
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 mt-8">
+                Select a video and click "Find Matches" to see results.
+              </div>
+            )}
+          </div>
+        </div>
       </main>
 
       {/* Video Modal */}

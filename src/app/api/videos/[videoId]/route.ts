@@ -92,6 +92,7 @@ export async function GET(
   };
 
   try {
+    console.log('🎬 API Route: Fetching video from TwelveLabs:', { videoId, indexId, url });
     const response = await fetch(url, options);
 
     if (!response.ok) {
@@ -112,6 +113,7 @@ export async function GET(
 
     // Use unknown type and a type guard for safer handling
     const videoData: unknown = await response.json();
+    console.log('🎬 API Route: TwelveLabs response received:', videoData);
 
     if (requestEmbeddings) {
 
@@ -160,6 +162,7 @@ export async function GET(
       console.warn(`⚠️ Embedding was requested but not found in API response!`);
     }
 
+    console.log('🎬 API Route: Final response data:', responseData);
     return NextResponse.json(responseData);
 
   } catch (e) {

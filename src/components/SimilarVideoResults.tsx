@@ -264,7 +264,7 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
 
   return (
     <div className="mt-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {currentResults.map((result, index) => {
           const { label, color } = getSimilarityLabel(result.score, result.originalSource as string);
           const videoId = result.metadata?.tl_video_id;
