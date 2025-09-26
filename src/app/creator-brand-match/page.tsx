@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   fetchVideos,
+  fetchVideoDetails,
   textToVideoEmbeddingSearch,
   videoToVideoEmbeddingSearch,
   checkAndEnsureEmbeddings,
@@ -14,6 +15,188 @@ import SimilarVideoResults from '@/components/SimilarVideoResults';
 import VideoModalSimple from '@/components/VideoModalSimple';
 import { VideoData, EmbeddingSearchResult, VideoPage } from '@/types';
 import LoadingSpinner from '@/components/LoadingSpinner';
+
+// Component to render video tags
+const VideoWithTags: React.FC<{ videoId: string; indexId: string }> = ({ videoId, indexId }) => {
+  const { data: videoDetails } = useQuery<VideoData, Error>({
+    queryKey: ["videoDetails", videoId],
+    queryFn: () => fetchVideoDetails(videoId, indexId),
+    enabled: !!videoId && !!indexId,
+  });
+
+  // Render tags from user_metadata (same as SimilarVideoResults)
+  const renderTags = (videoData: VideoData | undefined) => {
+    console.log('🏷️ renderTags called with:', videoData);
+    if (!videoData || !videoData.user_metadata) {
+      console.log('🏷️ No video data or user_metadata');
+      return null;
+    }
+
+    try {
+      // Extract brands from brand_product_events
+      const brands = new Set<string>();
+      if (videoData.user_metadata.brand_product_events) {
+        try {
+          const events = JSON.parse(videoData.user_metadata.brand_product_events);
+          if (Array.isArray(events)) {
+            events.forEach((event: any) => {
+              if (event.brand && typeof event.brand === 'string') {
+                brands.add(event.brand.trim());
+              }
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to parse brand_product_events:', error);
+        }
+      }
+
+      const allTags = Object.entries(videoData.user_metadata)
+      .filter(([key, value]) => {
+        // Filter out certain keys and null/undefined values
+        const excludeKeys = ['source', 'brand_product_events', 'analysis', 'brand_product_analyzed_at', 'brand_product_source'];
+        return !excludeKeys.includes(key) && value != null;
+      })
+      .flatMap(([, value]) => {
+        // Handle different data types properly
+        let processedValue: string[] = [];
+
+        if (typeof value === 'string') {
+          // Check if it's a JSON string
+          if (value.startsWith('[') && value.endsWith(']')) {
+            try {
+              const parsedArray = JSON.parse(value);
+              if (Array.isArray(parsedArray)) {
+                processedValue = parsedArray
+                  .filter(item => typeof item === 'string' && item.trim().length > 0)
+                  .map(item => item.trim());
+              }
+            } catch {
+              console.warn('Failed to parse JSON array:', value);
+              // Fall back to treating as comma-separated string
+              processedValue = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
+            }
+          } else if (value.startsWith('{') && value.endsWith('}')) {
+            // Skip JSON objects - they're too complex for pills
+            return [];
+          } else {
+            // Regular string - split by commas
+            processedValue = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
+          }
+        } else if (typeof value === 'number' || typeof value === 'boolean') {
+          processedValue = [value.toString()];
+        } else if (Array.isArray(value)) {
+          // Handle arrays directly
+          processedValue = value
+            .filter(item => item != null)
+            .map(item => typeof item === 'string' ? item.trim() : String(item))
+            .filter(item => item.length > 0);
+        } else if (typeof value === 'object') {
+          // Skip complex objects that shouldn't be displayed as tags
+          return [];
+        } else {
+          processedValue = [String(value)];
+        }
+
+        // Skip if no valid values
+        if (processedValue.length === 0) {
+          return [];
+        }
+
+        return processedValue
+          .map((tag: string) => {
+            // Trim and validate each tag
+            const trimmedTag = tag.trim();
+            if (trimmedTag.length === 0 || trimmedTag.length > 50) {
+              return ''; // Skip empty or overly long tags
+            }
+
+            // Filter out unwanted tags (case insensitive)
+            const lowerTag = trimmedTag.toLowerCase();
+            const unwantedPatterns = [
+              'not explicitly visible',
+              'not explicitly',
+              'explicitly visible',
+              'none',
+              'not visible'
+            ];
+
+            if (unwantedPatterns.some(pattern => lowerTag.includes(pattern))) {
+              return ''; // Skip unwanted tags
+            }
+
+            // Properly capitalize - first lowercase everything then capitalize first letter of each word
+            const properlyCapitalized = trimmedTag
+              .toLowerCase()
+              .split(' ')
+              .map((word: string) => {
+                if (word.length === 0) return word;
+                return word.charAt(0).toUpperCase() + word.slice(1);
+              })
+              .join(' ');
+
+            return properlyCapitalized;
+          })
+          .filter((tag: string) => tag !== '');
+      })
+      .filter(tag => tag.length > 0) // Remove any empty tags
+      .slice(0, 10); // Limit to 10 tags maximum to prevent UI overflow
+
+    // Add brands to tags (brands first)
+    const brandTags = Array.from(brands).map(brand => brand.trim()).filter(brand => brand.length > 0);
+
+    // Filter out unwanted tags from all tags (including brands)
+    const unwantedPatterns = [
+      'not explicitly visible',
+      'not explicitly',
+      'explicitly visible',
+      'none',
+      'not visible'
+    ];
+
+    const filteredBrandTags = brandTags.filter(tag =>
+      !unwantedPatterns.some(pattern => tag.toLowerCase().includes(pattern))
+    );
+
+    const filteredAllTags = allTags.filter(tag =>
+      !unwantedPatterns.some(pattern => tag.toLowerCase().includes(pattern))
+    );
+
+    const combinedTags = [...filteredBrandTags, ...filteredAllTags].slice(0, 10); // Limit to 10 tags total
+
+    // Return null if no valid tags found
+    if (combinedTags.length === 0) {
+      console.log('🏷️ No valid tags found');
+      return null;
+    }
+
+    console.log('🏷️ Found tags:', combinedTags);
+
+    return (
+      <div className="mt-1 pb-1">
+        <div className="flex flex-wrap gap-2">
+          {combinedTags.map((tag, idx) => (
+            <div
+              key={`${tag}-${idx}`}
+              className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors"
+            >
+              {tag}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+    } catch (error) {
+      console.error('❌ Error rendering tags for video:', videoData?._id, error);
+      return (
+        <div className="mt-1 text-xs text-gray-400 italic">
+          Unable to load tags
+        </div>
+      );
+    }
+  };
+
+  return renderTags(videoDetails);
+};
 
 export default function CreatorBrandMatch() {
   const description: string | undefined = undefined;
@@ -89,13 +272,6 @@ export default function CreatorBrandMatch() {
     }
   }, [targetVideosData]);
 
-  // Handle source type toggle
-  const handleSourceTypeToggle = () => {
-    setSourceType(prevType => prevType === 'brand' ? 'creator' : 'brand');
-    setSelectedVideoId(null);
-    setSimilarResults([]);
-    setEmbeddingsReady(false);
-  };
 
   // Handle video selection
   const handleVideoChange = (videoId: string) => {
@@ -297,6 +473,133 @@ export default function CreatorBrandMatch() {
     setShowProcessingMessage(false);
   };
 
+  // Render tags from user_metadata (same as SimilarVideoResults)
+  const renderTags = (videoData: VideoData | undefined) => {
+    console.log('🏷️ renderTags called with:', videoData);
+    if (!videoData || !videoData.user_metadata) {
+      console.log('🏷️ No video data or user_metadata');
+      return null;
+    }
+
+    try {
+      const allTags = Object.entries(videoData.user_metadata)
+      .filter(([key, value]) => {
+        // Filter out certain keys and null/undefined values
+        const excludeKeys = ['source', 'brand_product_events', 'analysis', 'brand_product_analyzed_at', 'brand_product_source'];
+        return !excludeKeys.includes(key) && value != null;
+      })
+      .flatMap(([, value]) => {
+        // Handle different data types properly
+        let processedValue: string[] = [];
+
+        if (typeof value === 'string') {
+          // Check if it's a JSON string
+          if (value.startsWith('[') && value.endsWith(']')) {
+            try {
+              const parsedArray = JSON.parse(value);
+              if (Array.isArray(parsedArray)) {
+                processedValue = parsedArray
+                  .filter(item => typeof item === 'string' && item.trim().length > 0)
+                  .map(item => item.trim());
+              }
+            } catch {
+              console.warn('Failed to parse JSON array:', value);
+              // Fall back to treating as comma-separated string
+              processedValue = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
+            }
+          } else if (value.startsWith('{') && value.endsWith('}')) {
+            // Skip JSON objects - they're too complex for pills
+            return [];
+          } else {
+            // Regular string - split by commas
+            processedValue = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
+          }
+        } else if (typeof value === 'number' || typeof value === 'boolean') {
+          processedValue = [value.toString()];
+        } else if (Array.isArray(value)) {
+          // Handle arrays directly
+          processedValue = value
+            .filter(item => item != null)
+            .map(item => typeof item === 'string' ? item.trim() : String(item))
+            .filter(item => item.length > 0);
+        } else if (typeof value === 'object') {
+          // Skip complex objects that shouldn't be displayed as tags
+          return [];
+        } else {
+          processedValue = [String(value)];
+        }
+
+        // Skip if no valid values
+        if (processedValue.length === 0) {
+          return [];
+        }
+
+        return processedValue
+          .map((tag: string) => {
+            // Trim and validate each tag
+            const trimmedTag = tag.trim();
+            if (trimmedTag.length === 0 || trimmedTag.length > 50) {
+              return ''; // Skip empty or overly long tags
+            }
+
+            // Properly capitalize - first lowercase everything then capitalize first letter of each word
+            const properlyCapitalized = trimmedTag
+              .toLowerCase()
+              .split(' ')
+              .map((word: string) => {
+                if (word.length === 0) return word;
+                return word.charAt(0).toUpperCase() + word.slice(1);
+              })
+              .join(' ');
+
+            return properlyCapitalized;
+          })
+          .filter((tag: string) => tag !== '');
+      })
+      .filter(tag => tag.length > 0) // Remove any empty tags
+      .slice(0, 10); // Limit to 10 tags maximum to prevent UI overflow
+
+    // Return null if no valid tags found
+    if (allTags.length === 0) {
+      console.log('🏷️ No valid tags found');
+      return null;
+    }
+
+    console.log('🏷️ Found tags:', allTags);
+
+    return (
+      <div className="mt-1 overflow-x-auto pb-1" style={{
+        msOverflowStyle: 'none',
+        scrollbarWidth: 'none',
+        WebkitOverflowScrolling: 'touch'
+      }}>
+        <div className="flex gap-2 min-w-min">
+          {allTags.map((tag, idx) => (
+            <div
+              key={`${tag}-${idx}`}
+              className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm whitespace-nowrap text-black hover:bg-gray-200 transition-colors"
+            >
+              {tag}
+            </div>
+          ))}
+        </div>
+        <style jsx>{`
+          div::-webkit-scrollbar {
+            display: none;
+          }
+        `}</style>
+      </div>
+    );
+    } catch (error) {
+      console.error('❌ Error rendering tags for video:', videoData?._id, error);
+      return (
+        <div className="mt-1 text-xs text-gray-400 italic">
+          Unable to load tags
+        </div>
+      );
+    }
+  };
+
   return (
     <div className="bg-zinc-100 h-screen flex flex-col">
       {/* Fixed Header */}
@@ -311,19 +614,37 @@ export default function CreatorBrandMatch() {
 
           {/* Source Type Toggle */}
           <div className="mb-6">
-            <div className="flex items-center justify-between max-w-lg mx-auto bg-gray-100 p-4 rounded-lg">
-              <span className={`px-4 py-2 rounded-md ${sourceType === 'brand' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
-                Brand → Creator
-              </span>
+            <div className="flex items-center justify-center max-w-lg mx-auto bg-gray-100 p-1 rounded-lg">
               <button
-                onClick={handleSourceTypeToggle}
-                className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300"
+                onClick={() => {
+                  setSourceType('brand');
+                  setSelectedVideoId(null);
+                  setSimilarResults([]);
+                  setEmbeddingsReady(false);
+                }}
+                className={`px-6 py-3 rounded-md font-medium transition-colors ${
+                  sourceType === 'brand'
+                    ? 'bg-black text-white'
+                    : 'text-gray-700 hover:bg-gray-200'
+                }`}
               >
-                Switch Direction
+                Brand → Creator
               </button>
-              <span className={`px-4 py-2 rounded-md ${sourceType === 'creator' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
+              <button
+                onClick={() => {
+                  setSourceType('creator');
+                  setSelectedVideoId(null);
+                  setSimilarResults([]);
+                  setEmbeddingsReady(false);
+                }}
+                className={`px-6 py-3 rounded-md font-medium transition-colors ${
+                  sourceType === 'creator'
+                    ? 'bg-black text-white'
+                    : 'text-gray-700 hover:bg-gray-200'
+                }`}
+              >
                 Creator → Brand
-              </span>
+              </button>
             </div>
           </div>
           {/* Processing Status Messages */}
@@ -350,10 +671,10 @@ export default function CreatorBrandMatch() {
                 </button>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div
-                  className="bg-blue-600 h-2.5 rounded-full"
-                  style={{ width: `${(targetEmbeddingsProgress.processed / targetEmbeddingsProgress.total) * 100}%` }}
-                ></div>
+                        <div
+                          className="bg-black h-2.5 rounded-full"
+                          style={{ width: `${(targetEmbeddingsProgress.processed / targetEmbeddingsProgress.total) * 100}%` }}
+                        ></div>
               </div>
             </div>
           )}
@@ -386,14 +707,19 @@ export default function CreatorBrandMatch() {
 
             {/* Selected Video Preview */}
             {selectedVideoId && (
-              <div className="flex justify-center flex-shrink-0">
+              <div className="flex flex-col items-center flex-shrink-0">
                 <Video
                   videoId={selectedVideoId}
                   indexId={sourceIndexId}
-                  showTitle={true}
+                  showTitle={false}
                   onPlay={() => handleOpenVideoModal(selectedVideoId)}
                   size="large"
                   showPlayer={true}
+                />
+                {/* Video Tags - using Video component's data */}
+                <VideoWithTags
+                  videoId={selectedVideoId}
+                  indexId={sourceIndexId}
                 />
               </div>
             )}
@@ -403,11 +729,11 @@ export default function CreatorBrandMatch() {
               <button
                 onClick={handleFindMatches}
                 disabled={!selectedVideoId || isAnalyzing}
-                className={`px-6 py-3 rounded-lg font-semibold ${
-                  !selectedVideoId || isAnalyzing
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                }`}
+                        className={`px-6 py-3 rounded-lg font-semibold ${
+                          !selectedVideoId || isAnalyzing
+                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            : 'bg-black text-white hover:bg-gray-800'
+                        }`}
               >
                 {isAnalyzing ? (
                   <span className="flex items-center">

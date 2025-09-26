@@ -53,7 +53,16 @@ const VideosDropDown: React.FC<VideosDropDownProps> = ({
         style={{ fontFamily: 'var(--font-sans)' }}
       >
         <div className="flex justify-between items-center">
-          <div className="truncate pr-8">
+          <div
+            className="truncate pr-8"
+            title={selectedVideoName}
+            style={{
+              maxWidth: 'calc(100% - 2rem)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}
+          >
             {selectedVideoName}
           </div>
           <div className="text-lg transform transition-transform duration-200" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>
@@ -80,8 +89,17 @@ const VideosDropDown: React.FC<VideosDropDownProps> = ({
                   className={`cursor-pointer rounded-2xl text-left py-2 px-4 hover:bg-gray-100 last:border-0 w-full ${video._id === footageVideoId ? 'bg-gray-200' : ''}`}
                   style={{ fontFamily: 'var(--font-sans)' }}
                   onClick={() => handleChange(video._id)}
+                  title={video.system_metadata?.filename}
                 >
-                  <div className="text-md truncate">
+                  <div
+                    className="text-md"
+                    style={{
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: '100%'
+                    }}
+                  >
                     {video.system_metadata?.filename}
                   </div>
                 </button>

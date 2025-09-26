@@ -142,6 +142,23 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
     if (!videoData || !videoData.user_metadata) return null;
 
     try {
+      // Extract brands from brand_product_events
+      const brands = new Set<string>();
+      if (videoData.user_metadata.brand_product_events) {
+        try {
+          const events = JSON.parse(videoData.user_metadata.brand_product_events);
+          if (Array.isArray(events)) {
+            events.forEach((event: any) => {
+              if (event.brand && typeof event.brand === 'string') {
+                brands.add(event.brand.trim());
+              }
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to parse brand_product_events:', error);
+        }
+      }
+
       const allTags = Object.entries(videoData.user_metadata)
       .filter(([key, value]) => {
         // Filter out certain keys and null/undefined values
@@ -202,6 +219,20 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
               return ''; // Skip empty or overly long tags
             }
 
+            // Filter out unwanted tags (case insensitive)
+            const lowerTag = trimmedTag.toLowerCase();
+            const unwantedPatterns = [
+              'not explicitly visible',
+              'not explicitly',
+              'explicitly visible',
+              'none',
+              'not visible'
+            ];
+
+            if (unwantedPatterns.some(pattern => lowerTag.includes(pattern))) {
+              return ''; // Skip unwanted tags
+            }
+
             // Properly capitalize - first lowercase everything then capitalize first letter of each word
             const properlyCapitalized = trimmedTag
               .toLowerCase()
@@ -219,8 +250,30 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
       .filter(tag => tag.length > 0) // Remove any empty tags
       .slice(0, 10); // Limit to 10 tags maximum to prevent UI overflow
 
+    // Add brands to tags (brands first)
+    const brandTags = Array.from(brands).map(brand => brand.trim()).filter(brand => brand.length > 0);
+
+    // Filter out unwanted tags from all tags (including brands)
+    const unwantedPatterns = [
+      'not explicitly visible',
+      'not explicitly',
+      'explicitly visible',
+      'none',
+      'not visible'
+    ];
+
+    const filteredBrandTags = brandTags.filter(tag =>
+      !unwantedPatterns.some(pattern => tag.toLowerCase().includes(pattern))
+    );
+
+    const filteredAllTags = allTags.filter(tag =>
+      !unwantedPatterns.some(pattern => tag.toLowerCase().includes(pattern))
+    );
+
+    const combinedTags = [...filteredBrandTags, ...filteredAllTags].slice(0, 10); // Limit to 10 tags total
+
     // Return null if no valid tags found
-    if (allTags.length === 0) {
+    if (combinedTags.length === 0) {
       return null;
     }
 
@@ -231,7 +284,7 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
         WebkitOverflowScrolling: 'touch'
       }}>
         <div className="flex gap-2 min-w-min">
-          {allTags.map((tag, idx) => (
+          {combinedTags.map((tag, idx) => (
             <div
               key={`${tag}-${idx}`}
               className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm whitespace-nowrap text-black hover:bg-gray-200 transition-colors"
