@@ -195,7 +195,7 @@ const Video: React.FC<EnhancedVideoProps> = ({
       case 'small':
         return 'w-48 h-28';
       case 'large':
-        return 'w-full max-w-lg h-64';
+        return 'w-full max-w-2xl h-80';
       case 'medium':
       default:
         return 'w-64 h-36';

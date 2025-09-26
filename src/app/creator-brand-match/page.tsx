@@ -298,75 +298,78 @@ export default function CreatorBrandMatch() {
   };
 
   return (
-    <div className="bg-zinc-100">
-      <main className="container mx-auto px-4 py-8">
-        {/* Description */}
-        {description && (
-          <div className="mb-8 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg">
-            <p className="text-gray-700">{description}</p>
-          </div>
-        )}
+    <div className="bg-zinc-100 h-screen flex flex-col">
+      {/* Fixed Header */}
+      <div className="flex-shrink-0">
+        <main className="container mx-auto px-4 py-8">
+          {/* Description */}
+          {description && (
+            <div className="mb-8 p-4 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg">
+              <p className="text-gray-700">{description}</p>
+            </div>
+          )}
 
-        {/* Source Type Toggle */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between max-w-lg mx-auto bg-gray-100 p-4 rounded-lg">
-            <span className={`px-4 py-2 rounded-md ${sourceType === 'brand' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
-              Brand → Creator
-            </span>
-            <button
-              onClick={handleSourceTypeToggle}
-              className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300"
-            >
-              Switch Direction
-            </button>
-            <span className={`px-4 py-2 rounded-md ${sourceType === 'creator' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
-              Creator → Brand
-            </span>
-          </div>
-        </div>
-
-        {/* Processing Status Messages */}
-        {isLoadingEmbeddings && showProcessingMessage && (
-          <div className="max-w-3xl mx-auto mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
-            <div className="flex items-center">
-              <LoadingSpinner size="sm" className="mr-3" />
-              <span>
-                Processing embeddings for {sourceType === 'brand' ? 'brand' : 'creator'} and {sourceType === 'brand' ? 'creator' : 'brand'} videos...
+          {/* Source Type Toggle */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between max-w-lg mx-auto bg-gray-100 p-4 rounded-lg">
+              <span className={`px-4 py-2 rounded-md ${sourceType === 'brand' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
+                Brand → Creator
+              </span>
+              <button
+                onClick={handleSourceTypeToggle}
+                className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300"
+              >
+                Switch Direction
+              </button>
+              <span className={`px-4 py-2 rounded-md ${sourceType === 'creator' ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
+                Creator → Brand
               </span>
             </div>
-            <button onClick={dismissMessage} className="text-gray-500 hover:text-gray-700">
-              ✕
-            </button>
           </div>
-        )}
-
-        {isProcessingTargetEmbeddings && targetEmbeddingsProgress.total > 0 && showProcessingMessage && (
-          <div className="max-w-3xl mx-auto mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex justify-between items-center mb-2">
-              <span>Processing {targetEmbeddingsProgress.processed}/{targetEmbeddingsProgress.total} videos</span>
+          {/* Processing Status Messages */}
+          {isLoadingEmbeddings && showProcessingMessage && (
+            <div className="max-w-3xl mx-auto mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+              <div className="flex items-center">
+                <LoadingSpinner size="sm" className="mr-3" />
+                <span>
+                  Processing embeddings for {sourceType === 'brand' ? 'brand' : 'creator'} and {sourceType === 'brand' ? 'creator' : 'brand'} videos...
+                </span>
+              </div>
               <button onClick={dismissMessage} className="text-gray-500 hover:text-gray-700">
                 ✕
               </button>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div
-                className="bg-blue-600 h-2.5 rounded-full"
-                style={{ width: `${(targetEmbeddingsProgress.processed / targetEmbeddingsProgress.total) * 100}%` }}
-              ></div>
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* Main Content Layout - Left: Reference Video, Right: Results */}
-        <div className="flex gap-8">
+          {isProcessingTargetEmbeddings && targetEmbeddingsProgress.total > 0 && showProcessingMessage && (
+            <div className="max-w-3xl mx-auto mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex justify-between items-center mb-2">
+                <span>Processing {targetEmbeddingsProgress.processed}/{targetEmbeddingsProgress.total} videos</span>
+                <button onClick={dismissMessage} className="text-gray-500 hover:text-gray-700">
+                  ✕
+                </button>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div
+                  className="bg-blue-600 h-2.5 rounded-full"
+                  style={{ width: `${(targetEmbeddingsProgress.processed / targetEmbeddingsProgress.total) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Main Content Layout - Left: Reference Video, Right: Results */}
+      <div className="flex-1 flex gap-8 min-h-0 container mx-auto px-4 -mt-8">
           {/* Left Side - Reference Video Selection */}
-          <div className="w-1/2">
+          <div className="w-1/2 flex flex-col">
             <h2 className="text-xl font-semibold mb-4">
               Select {sourceType === 'brand' ? 'Brand' : 'Creator'} Video
             </h2>
 
             {/* Video Dropdown */}
-            <div className="mb-6">
+            <div className="mb-6 flex-shrink-0">
               <VideosDropDown
                 indexId={sourceIndexId}
                 onVideoChange={handleVideoChange}
@@ -383,7 +386,7 @@ export default function CreatorBrandMatch() {
 
             {/* Selected Video Preview */}
             {selectedVideoId && (
-              <div className="flex justify-center">
+              <div className="flex justify-center flex-shrink-0">
                 <Video
                   videoId={selectedVideoId}
                   indexId={sourceIndexId}
@@ -396,7 +399,7 @@ export default function CreatorBrandMatch() {
             )}
 
             {/* Find Matches Button */}
-            <div className="flex justify-center">
+            <div className="flex justify-center flex-shrink-0 mt-4">
               <button
                 onClick={handleFindMatches}
                 disabled={!selectedVideoId || isAnalyzing}
@@ -419,13 +422,15 @@ export default function CreatorBrandMatch() {
           </div>
 
           {/* Right Side - Search Results */}
-          <div className="w-1/2">
+          <div className="w-1/2 flex flex-col">
             {similarResults.length > 0 ? (
-              <div>
-                <h2 className="text-xl font-semibold mb-4">
+              <div className="flex flex-col h-full">
+                <h2 className="text-xl font-semibold mb-4 flex-shrink-0">
                   {sourceType === 'brand' ? 'Creator' : 'Brand'} Matches
                 </h2>
-                <SimilarVideoResults results={similarResults} indexId={targetIndexId} />
+                <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
+                  <SimilarVideoResults results={similarResults} indexId={targetIndexId} />
+                </div>
               </div>
             ) : !isAnalyzing && embeddingsReady ? (
               <div className="text-center text-gray-600 mt-8">
@@ -438,7 +443,6 @@ export default function CreatorBrandMatch() {
             )}
           </div>
         </div>
-      </main>
 
       {/* Video Modal */}
       {modalVideo && (

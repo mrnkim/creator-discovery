@@ -234,7 +234,7 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
           {allTags.map((tag, idx) => (
             <div
               key={`${tag}-${idx}`}
-              className="inline-block flex-shrink-0 bg-gray-100 border rounded-full px-3 py-1 text-xs whitespace-nowrap text-gray-700 hover:bg-gray-200 transition-colors"
+              className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm whitespace-nowrap text-black hover:bg-gray-200 transition-colors"
             >
               {tag}
             </div>
@@ -284,8 +284,8 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
   };
 
   return (
-    <div className="mt-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="mt-4">
+      <div className="grid grid-cols-1 gap-6">
         {currentResults.map((result, index) => {
           const { label, color } = getSimilarityLabel(result.score, result.originalSource as string);
           const videoId = result.metadata?.tl_video_id;
@@ -300,20 +300,16 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
 
           return (
             <div key={index} className="flex flex-col">
-              <div
-                className="cursor-pointer"
-                onClick={() => handleVideoClick(videoId)}
-              >
                 <Video
                   videoId={videoId}
                   indexId={indexId}
-                  showTitle={true}
+                  showTitle={false}
                   confidenceLabel={label}
                   confidenceColor={color as 'green' | 'yellow' | 'red'}
-                  disablePlayback={true}
-                  onPlay={() => handleVideoClick(videoId)}
+                  disablePlayback={false}
+                  size="large"
+                  showPlayer={true}
                 />
-              </div>
 
               {/* Show loading indicator if details are still loading */}
               {loadingDetails && !videoData ? (
