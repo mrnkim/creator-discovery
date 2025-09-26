@@ -8,7 +8,7 @@ import { useInView } from 'react-intersection-observer';
 
 const ITEMS_PER_PAGE = 9;
 
-const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, indexId }) => {
+const SimilarVideoResults: React.FC<SimilarVideoResultsProps & { sourceType?: 'brand' | 'creator' }> = ({ results, indexId, sourceType }) => {
   const [videoDetails, setVideoDetails] = useState<Record<string, VideoData>>({});
   const [loadingDetails, setLoadingDetails] = useState<boolean>(false);
   const [selectedVideo, setSelectedVideo] = useState<SelectedVideoData | null>(null);
@@ -270,7 +270,10 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
       !unwantedPatterns.some(pattern => tag.toLowerCase().includes(pattern))
     );
 
-    const combinedTags = [...filteredBrandTags, ...filteredAllTags].slice(0, 10); // Limit to 10 tags total
+    // Adjust tag order based on source type
+    const combinedTags = sourceType === 'brand'
+      ? [...filteredAllTags, ...filteredBrandTags].slice(0, 10) // Brand → Creator: brands last
+      : [...filteredBrandTags, ...filteredAllTags].slice(0, 10); // Creator → Brand: brands first
 
     // Return null if no valid tags found
     if (combinedTags.length === 0) {

@@ -754,9 +754,9 @@ export default function CreatorBrandMatch() {
                 <h2 className="text-xl font-semibold mb-4 flex-shrink-0">
                   {sourceType === 'brand' ? 'Creator' : 'Brand'} Matches
                 </h2>
-                <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
-                  <SimilarVideoResults results={similarResults} indexId={targetIndexId} />
-                </div>
+                        <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
+                          <SimilarVideoResults results={similarResults} indexId={targetIndexId} sourceType={sourceType} />
+                        </div>
               </div>
             ) : !isAnalyzing && embeddingsReady ? (
               <div className="text-center text-gray-600 mt-8">
