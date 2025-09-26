@@ -11,6 +11,76 @@ import {
 const vectorExistenceCache = new Map<string, { exists: boolean; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+// Cache for failed video lookups to prevent repeated API calls for missing videos
+const failedVideoCache = new Map<string, { timestamp: number; error: string }>();
+const FAILED_VIDEO_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Clears the failed video cache
+ * Useful when you want to retry fetching videos that previously failed
+ */
+export function clearFailedVideoCache(): void {
+  failedVideoCache.clear();
+  console.log('🧹 Cleared failed video cache');
+}
+
+/**
+ * Gets the number of failed videos currently cached
+ */
+export function getFailedVideoCacheSize(): number {
+  return failedVideoCache.size;
+}
+
+/**
+ * Fetches video details with retry logic for videos that might be processing
+ * @param videoId ID of the video to fetch
+ * @param indexId Index ID where the video is stored
+ * @param embed Whether to include embedding data
+ * @param maxRetries Maximum number of retries (default: 2)
+ * @param baseDelay Base delay between retries in ms (default: 1000)
+ * @returns Promise with video details
+ */
+export async function fetchVideoDetailsWithRetry(
+  videoId: string,
+  indexId: string,
+  embed: boolean = false,
+  maxRetries: number = 2,
+  baseDelay: number = 1000
+): Promise<VideoData> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetchVideoDetails(videoId, indexId, embed);
+    } catch (error) {
+      lastError = error as Error;
+      const errorMessage = lastError.message;
+
+      // If it's a "not found" error, don't retry
+      if (
+        errorMessage.includes('not found') ||
+        errorMessage.includes('cached failure') ||
+        errorMessage.includes('resource_not_exists')
+      ) {
+        throw lastError;
+      }
+
+      // If this is the last attempt, throw the error
+      if (attempt === maxRetries) {
+        throw lastError;
+      }
+
+      // Calculate delay with exponential backoff
+      const delay = baseDelay * Math.pow(2, attempt);
+      console.log(`⏳ Retrying fetch for video ${videoId} in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
+
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+
+  throw lastError || new Error('Unknown error occurred');
+}
+
 /**
  * Fetches videos from the API with pagination
  * @param page Page number to fetch
@@ -60,6 +130,16 @@ export async function fetchVideoDetails(
   indexId: string,
   embed: boolean = false
 ): Promise<VideoData> {
+  const cacheKey = `${videoId}-${indexId}`;
+  const now = Date.now();
+
+  // Check if this video has failed recently
+  const failedCache = failedVideoCache.get(cacheKey);
+  if (failedCache && (now - failedCache.timestamp) < FAILED_VIDEO_CACHE_DURATION) {
+    console.log(`🚫 Skipping fetch for known missing video: ${videoId}`);
+    throw new Error(`Video ${videoId} not found (cached failure)`);
+  }
+
   try {
     const response = await axios.get<VideoData>(`/api/videos/${videoId}`, {
       params: {
@@ -69,6 +149,21 @@ export async function fetchVideoDetails(
     });
     return response.data;
   } catch (error) {
+    // Check if it's a 404 error (video not found)
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      const errorData = error.response.data;
+      if (errorData?.code === 'VIDEO_NOT_FOUND') {
+        // Cache this failure to avoid repeated API calls
+        failedVideoCache.set(cacheKey, {
+          timestamp: now,
+          error: errorData.message || 'Video not found'
+        });
+
+        console.warn(`⚠️ Video ${videoId} not found in index ${indexId}. Cached failure to prevent repeated requests.`);
+        throw new Error(`Video ${videoId} not found`);
+      }
+    }
+
     console.error(`Error fetching video details for ${videoId}:`, error);
     throw error;
   }

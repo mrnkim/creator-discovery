@@ -96,13 +96,24 @@ export async function GET(
 
     if (!response.ok) {
       const errorText = await response.text();
+
+      // If video is not found, provide a more helpful error message and return a specific error code
+      if (response.status === 404) {
+        console.warn(`⚠️ Video ${videoId} not found in index ${indexId}. It may have been deleted or is still processing.`);
+
+        return NextResponse.json(
+          {
+            error: 'Video not found',
+            code: 'VIDEO_NOT_FOUND',
+            message: `Video ${videoId} does not exist in index ${indexId}`,
+            details: errorText
+          },
+          { status: 404 }
+        );
+      }
+
       console.error(`❌ API error: ${response.status} ${response.statusText}`);
       console.error(`❌ Error details: ${errorText}`);
-
-      // If video is not found, provide a more helpful error message
-      if (response.status === 404) {
-        console.error(`❌ Video ${videoId} not found in index ${indexId}. It might still be processing.`);
-      }
 
       return NextResponse.json(
         { error: `Failed to fetch video data: ${response.statusText}`, details: errorText },

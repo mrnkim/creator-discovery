@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Video from './Video';
 import VideoModalSimple from './VideoModalSimple';
-import { fetchVideoDetails } from '@/hooks/apiHooks';
+import { fetchVideoDetailsWithRetry, getFailedVideoCacheSize } from '@/hooks/apiHooks';
 import { VideoData, SimilarVideoResultsProps, SelectedVideoData } from '@/types';
 import LoadingSpinner from './LoadingSpinner';
 import { useInView } from 'react-intersection-observer';
@@ -14,6 +14,7 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
   const [selectedVideo, setSelectedVideo] = useState<SelectedVideoData | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const isFetchingRef = useRef<boolean>(false);
 
   const { ref: loadMoreRef, inView } = useInView({
     threshold: 0.1,
@@ -33,7 +34,7 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
   // Fetch video details for each result
   useEffect(() => {
     const fetchAllVideoDetails = async () => {
-      if (results.length === 0) return;
+      if (results.length === 0 || isFetchingRef.current) return;
 
       const loadedVideoIds = new Set(Object.keys(videoDetails));
       const videosToFetch = currentResults
@@ -41,56 +42,76 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
 
       if (videosToFetch.length === 0) return;
 
+      isFetchingRef.current = true;
       setLoadingMore(true);
-      const detailsMap: Record<string, VideoData> = { ...videoDetails };
       const invalidVideoIds = new Set<string>();
 
       try {
-        await Promise.all(
-          videosToFetch.map(async (result) => {
-            const videoId = result.metadata?.tl_video_id;
-            if (!videoId) return;
+        const fetchPromises = videosToFetch.map(async (result) => {
+          const videoId = result.metadata?.tl_video_id;
+          if (!videoId) return null;
 
-            try {
-              const details = await fetchVideoDetails(videoId, indexId);
-              if (details) {
-                detailsMap[videoId] = details;
-              } else {
-                console.warn(`No details returned for video ${videoId}`);
-                invalidVideoIds.add(videoId);
-              }
-            } catch (error) {
+          try {
+            // Use retry logic for videos that might be processing
+            const details = await fetchVideoDetailsWithRetry(videoId, indexId, false, 1, 500);
+            return { videoId, details };
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+
+            // Check for various "not found" error patterns
+            if (
+              errorMessage.includes('resource_not_exists') ||
+              errorMessage.includes('does not exist') ||
+              errorMessage.includes('Not Found') ||
+              errorMessage.includes('not found') ||
+              errorMessage.includes('cached failure')
+            ) {
+              console.log(`📝 Video ${videoId} not found, excluding from results`);
+              invalidVideoIds.add(videoId);
+              return null;
+            } else {
               console.error(`Error fetching details for video ${videoId}:`, error);
-
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              if (
-                errorMessage.includes('resource_not_exists') ||
-                errorMessage.includes('does not exist') ||
-                errorMessage.includes('Not Found')
-              ) {
-                console.warn(`Video ${videoId} does not exist in collection, excluding from results`);
-                invalidVideoIds.add(videoId);
-              }
+              return null;
             }
-          })
-        );
+          }
+        });
 
-        setVideoDetails(detailsMap);
+        const fetchResults = await Promise.all(fetchPromises);
+
+        // Update video details in a single batch
+        const newDetails: Record<string, VideoData> = {};
+        fetchResults.forEach(result => {
+          if (result && result.details) {
+            newDetails[result.videoId] = result.details;
+          }
+        });
+
+        // Only update if we have new details
+        if (Object.keys(newDetails).length > 0) {
+          setVideoDetails(prev => ({ ...prev, ...newDetails }));
+        }
 
         if (invalidVideoIds.size > 0) {
-          console.info(`Excluded ${invalidVideoIds.size} invalid videos from results:`,
+          console.info(`📝 Excluded ${invalidVideoIds.size} invalid videos from results:`,
             Array.from(invalidVideoIds));
+
+          // Log cache status for debugging
+          const cacheSize = getFailedVideoCacheSize();
+          if (cacheSize > 0) {
+            console.log(`💾 Failed video cache contains ${cacheSize} entries`);
+          }
         }
       } catch (error) {
         console.error('Error fetching video details:', error);
       } finally {
+        isFetchingRef.current = false;
         setLoadingMore(false);
         setLoadingDetails(false);
       }
     };
 
     fetchAllVideoDetails();
-  }, [results, indexId, currentPage, videoDetails, currentResults]);
+  }, [results, indexId, currentPage, currentResults]);
 
   useEffect(() => {
     if (results.length > 0) {
@@ -127,7 +148,7 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps> = ({ results, inde
         const excludeKeys = ['source', 'brand_product_events', 'analysis', 'brand_product_analyzed_at', 'brand_product_source'];
         return !excludeKeys.includes(key) && value != null;
       })
-      .flatMap(([key, value]) => {
+      .flatMap(([, value]) => {
         // Handle different data types properly
         let processedValue: string[] = [];
 
