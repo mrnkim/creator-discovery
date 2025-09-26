@@ -37,11 +37,11 @@ const VideoWithTags: React.FC<{ videoId: string; indexId: string }> = ({ videoId
       const brands = new Set<string>();
       if (videoData.user_metadata.brand_product_events) {
         try {
-          const events = JSON.parse(videoData.user_metadata.brand_product_events);
+          const events = JSON.parse(videoData.user_metadata.brand_product_events as string) as unknown[];
           if (Array.isArray(events)) {
-            events.forEach((event: any) => {
-              if (event.brand && typeof event.brand === 'string') {
-                brands.add(event.brand.trim());
+            events.forEach((event: unknown) => {
+              if (event && typeof event === 'object' && 'brand' in event && typeof (event as { brand: unknown }).brand === 'string') {
+                brands.add(String((event as { brand: string }).brand).trim());
               }
             });
           }
@@ -473,132 +473,6 @@ export default function CreatorBrandMatch() {
     setShowProcessingMessage(false);
   };
 
-  // Render tags from user_metadata (same as SimilarVideoResults)
-  const renderTags = (videoData: VideoData | undefined) => {
-    console.log('🏷️ renderTags called with:', videoData);
-    if (!videoData || !videoData.user_metadata) {
-      console.log('🏷️ No video data or user_metadata');
-      return null;
-    }
-
-    try {
-      const allTags = Object.entries(videoData.user_metadata)
-      .filter(([key, value]) => {
-        // Filter out certain keys and null/undefined values
-        const excludeKeys = ['source', 'brand_product_events', 'analysis', 'brand_product_analyzed_at', 'brand_product_source'];
-        return !excludeKeys.includes(key) && value != null;
-      })
-      .flatMap(([, value]) => {
-        // Handle different data types properly
-        let processedValue: string[] = [];
-
-        if (typeof value === 'string') {
-          // Check if it's a JSON string
-          if (value.startsWith('[') && value.endsWith(']')) {
-            try {
-              const parsedArray = JSON.parse(value);
-              if (Array.isArray(parsedArray)) {
-                processedValue = parsedArray
-                  .filter(item => typeof item === 'string' && item.trim().length > 0)
-                  .map(item => item.trim());
-              }
-            } catch {
-              console.warn('Failed to parse JSON array:', value);
-              // Fall back to treating as comma-separated string
-              processedValue = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
-            }
-          } else if (value.startsWith('{') && value.endsWith('}')) {
-            // Skip JSON objects - they're too complex for pills
-            return [];
-          } else {
-            // Regular string - split by commas
-            processedValue = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
-          }
-        } else if (typeof value === 'number' || typeof value === 'boolean') {
-          processedValue = [value.toString()];
-        } else if (Array.isArray(value)) {
-          // Handle arrays directly
-          processedValue = value
-            .filter(item => item != null)
-            .map(item => typeof item === 'string' ? item.trim() : String(item))
-            .filter(item => item.length > 0);
-        } else if (typeof value === 'object') {
-          // Skip complex objects that shouldn't be displayed as tags
-          return [];
-        } else {
-          processedValue = [String(value)];
-        }
-
-        // Skip if no valid values
-        if (processedValue.length === 0) {
-          return [];
-        }
-
-        return processedValue
-          .map((tag: string) => {
-            // Trim and validate each tag
-            const trimmedTag = tag.trim();
-            if (trimmedTag.length === 0 || trimmedTag.length > 50) {
-              return ''; // Skip empty or overly long tags
-            }
-
-            // Properly capitalize - first lowercase everything then capitalize first letter of each word
-            const properlyCapitalized = trimmedTag
-              .toLowerCase()
-              .split(' ')
-              .map((word: string) => {
-                if (word.length === 0) return word;
-                return word.charAt(0).toUpperCase() + word.slice(1);
-              })
-              .join(' ');
-
-            return properlyCapitalized;
-          })
-          .filter((tag: string) => tag !== '');
-      })
-      .filter(tag => tag.length > 0) // Remove any empty tags
-      .slice(0, 10); // Limit to 10 tags maximum to prevent UI overflow
-
-    // Return null if no valid tags found
-    if (allTags.length === 0) {
-      console.log('🏷️ No valid tags found');
-      return null;
-    }
-
-    console.log('🏷️ Found tags:', allTags);
-
-    return (
-      <div className="mt-1 overflow-x-auto pb-1" style={{
-        msOverflowStyle: 'none',
-        scrollbarWidth: 'none',
-        WebkitOverflowScrolling: 'touch'
-      }}>
-        <div className="flex gap-2 min-w-min">
-          {allTags.map((tag, idx) => (
-            <div
-              key={`${tag}-${idx}`}
-              className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm whitespace-nowrap text-black hover:bg-gray-200 transition-colors"
-            >
-              {tag}
-            </div>
-          ))}
-        </div>
-        <style jsx>{`
-          div::-webkit-scrollbar {
-            display: none;
-          }
-        `}</style>
-      </div>
-    );
-    } catch (error) {
-      console.error('❌ Error rendering tags for video:', videoData?._id, error);
-      return (
-        <div className="mt-1 text-xs text-gray-400 italic">
-          Unable to load tags
-        </div>
-      );
-    }
-  };
 
   return (
     <div className="bg-zinc-100 h-screen flex flex-col">

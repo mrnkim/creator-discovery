@@ -111,7 +111,7 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps & { sourceType?: 'b
     };
 
     fetchAllVideoDetails();
-  }, [results, indexId, currentPage, currentResults]);
+  }, [results, indexId, currentPage, currentResults, videoDetails]);
 
   useEffect(() => {
     if (results.length > 0) {
@@ -146,11 +146,11 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps & { sourceType?: 'b
       const brands = new Set<string>();
       if (videoData.user_metadata.brand_product_events) {
         try {
-          const events = JSON.parse(videoData.user_metadata.brand_product_events);
+          const events = JSON.parse(videoData.user_metadata.brand_product_events as string) as unknown[];
           if (Array.isArray(events)) {
-            events.forEach((event: any) => {
-              if (event.brand && typeof event.brand === 'string') {
-                brands.add(event.brand.trim());
+            events.forEach((event: unknown) => {
+              if (event && typeof event === 'object' && 'brand' in event && typeof (event as { brand: unknown }).brand === 'string') {
+                brands.add((event as { brand: string }).brand.trim());
               }
             });
           }
@@ -313,27 +313,6 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps & { sourceType?: 'b
     }
   };
 
-  const handleVideoClick = (videoId: string) => {
-    const videoData = videoDetails[videoId];
-    const resultData = results.find(result => result.metadata?.tl_video_id === videoId);
-
-    if (!videoData || !videoData.hls?.video_url) return;
-
-    const title = videoData.system_metadata?.filename ||
-      videoData.system_metadata?.video_title ||
-      `Video ${videoId}`;
-
-    setSelectedVideo({
-      id: videoId,
-      url: videoData.hls.video_url,
-      title: title,
-      score: resultData?.score,
-      textScore: resultData?.textScore,
-      videoScore: resultData?.videoScore,
-      originalSource: resultData?.originalSource as 'TEXT' | 'VIDEO' | 'BOTH',
-      metadata: videoData
-    });
-  };
 
   const handleCloseModal = () => {
     setSelectedVideo(null);
