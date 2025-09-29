@@ -345,6 +345,7 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps & { sourceType?: 'b
                   size="large"
                   showPlayer={true}
                   showCreatorTag={sourceType === 'brand'}
+                  showBrandTag={sourceType === 'creator'}
                 />
 
               {/* Show loading indicator if details are still loading */}

@@ -638,6 +638,24 @@ export default function CreatorBrandMatch() {
                 {sourceType === 'brand' && (
                   <BrandTagOverlay videoId={selectedVideoId} indexId={sourceIndexId} />
                 )}
+                {/* Creator Tag Overlay - only show for Creator → Brand mode */}
+                {sourceType === 'creator' && (
+                  <div className="absolute top-3 left-6 z-10">
+                    <span className="px-2 py-1 text-sm bg-custom-orange rounded-xl font-bold">
+                      {(() => {
+                        const video = videosData?.pages.flatMap((page: { data: VideoData[]; }) => page.data)
+                          .find((video: VideoData) => video._id === selectedVideoId);
+                        if (!video || !video.user_metadata) return 'Creator';
+
+                        const creator = video.user_metadata.creator ||
+                                       video.user_metadata.video_creator ||
+                                       video.user_metadata.creator_id;
+
+                        return creator && typeof creator === 'string' ? creator.trim() : 'Creator';
+                      })()}
+                    </span>
+                  </div>
+                )}
               </div>
               {/* Video Tags - using Video component's data */}
               <VideoWithTags

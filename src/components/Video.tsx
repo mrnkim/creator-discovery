@@ -148,6 +148,7 @@ interface EnhancedVideoProps extends VideoProps {
   size?: 'small' | 'medium' | 'large';
   showPlayer?: boolean;
   showCreatorTag?: boolean;
+  showBrandTag?: boolean;
 }
 
 const Video: React.FC<EnhancedVideoProps> = ({
@@ -162,7 +163,8 @@ const Video: React.FC<EnhancedVideoProps> = ({
   disablePlayback = false,
   size = 'medium',
   showPlayer = false,
-  showCreatorTag = false
+  showCreatorTag = false,
+  showBrandTag = false
 }) => {
   const { data: videoDetails, isLoading, error } = useQuery<VideoDetails, Error>({
     queryKey: ["videoDetails", videoId],
@@ -201,6 +203,31 @@ const Video: React.FC<EnhancedVideoProps> = ({
 
     if (creator && typeof creator === 'string' && creator.trim().length > 0) {
       return creator.trim();
+    }
+
+    return null;
+  };
+
+  // Extract brand name from user_metadata
+  const getBrandName = (videoData: VideoDetails | undefined): string | null => {
+    if (!videoData || !videoData.user_metadata) return null;
+
+    try {
+      // Extract first brand from brand_product_events
+      if (videoData.user_metadata.brand_product_events) {
+        const events = JSON.parse(videoData.user_metadata.brand_product_events as string) as unknown[];
+        if (Array.isArray(events) && events.length > 0) {
+          const firstEvent = events[0];
+          if (firstEvent && typeof firstEvent === 'object' && 'brand' in firstEvent && typeof (firstEvent as { brand: unknown; }).brand === 'string') {
+            const brand = String((firstEvent as { brand: string; }).brand).trim();
+            if (brand.length > 0) {
+              return brand;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to parse brand_product_events:', error);
     }
 
     return null;
@@ -303,6 +330,15 @@ const Video: React.FC<EnhancedVideoProps> = ({
             <div className="absolute top-3 left-12 z-50">
               <span className="px-2 py-1 text-sm bg-custom-orange rounded-xl font-bold">
                 {getCreatorName(finalVideoDetails)}
+              </span>
+            </div>
+          )}
+
+          {/* Brand Tag Overlay - positioned at top-left */}
+          {showBrandTag && getBrandName(finalVideoDetails) && (
+            <div className="absolute top-3 left-12 z-50">
+              <span className="px-2 py-1 text-sm bg-custom-green rounded-xl font-bold">
+                {getBrandName(finalVideoDetails)}
               </span>
             </div>
           )}

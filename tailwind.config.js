@@ -12,6 +12,7 @@ module.exports = {
         "custom-red": "var(--color-red)",
         "custom-blue": "var(--color-blue)",
         "custom-orange": "var(--color-orange)",
+        "custom-pink": "var(--color-pink)",
       },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
