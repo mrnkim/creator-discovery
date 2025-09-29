@@ -147,6 +147,7 @@ interface EnhancedVideoProps extends VideoProps {
   disablePlayback?: boolean;
   size?: 'small' | 'medium' | 'large';
   showPlayer?: boolean;
+  showCreatorTag?: boolean;
 }
 
 const Video: React.FC<EnhancedVideoProps> = ({
@@ -160,7 +161,8 @@ const Video: React.FC<EnhancedVideoProps> = ({
   timeRange,
   disablePlayback = false,
   size = 'medium',
-  showPlayer = false
+  showPlayer = false,
+  showCreatorTag = false
 }) => {
   const { data: videoDetails, isLoading, error } = useQuery<VideoDetails, Error>({
     queryKey: ["videoDetails", videoId],
@@ -189,6 +191,21 @@ const Video: React.FC<EnhancedVideoProps> = ({
     ].join(":");
   };
 
+  // Extract creator name from user_metadata
+  const getCreatorName = (videoData: VideoDetails | undefined): string | null => {
+    if (!videoData || !videoData.user_metadata) return null;
+
+    const creator = videoData.user_metadata.creator ||
+                   videoData.user_metadata.video_creator ||
+                   videoData.user_metadata.creator_id;
+
+    if (creator && typeof creator === 'string' && creator.trim().length > 0) {
+      return creator.trim();
+    }
+
+    return null;
+  };
+
   // Get size classes based on size prop
   const getSizeClasses = () => {
     switch (size) {
@@ -205,7 +222,7 @@ const Video: React.FC<EnhancedVideoProps> = ({
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
       <Suspense fallback={<LoadingSpinner />}>
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center relative">
           {/* Video Player or Thumbnail */}
           <div
             className={`${getSizeClasses()} relative rounded-[45.60px] overflow-hidden`}
@@ -227,7 +244,7 @@ const Video: React.FC<EnhancedVideoProps> = ({
             {showPlayer && finalVideoDetails?.hls?.video_url ? (
               <HLSVideoPlayer
                 videoUrl={finalVideoDetails.hls.video_url}
-                className="absolute inset-0 w-full h-full z-10"
+                className="absolute inset-0 w-full h-full z-0"
               />
             ) : (
               <div className="absolute inset-0">
@@ -238,24 +255,6 @@ const Video: React.FC<EnhancedVideoProps> = ({
                 />
               </div>
             )}
-
-            {/* Top section with confidence label */}
-            <div className="relative self-stretch flex-1 p-5 flex flex-col justify-start items-start gap-2 z-10 cursor-pointer">
-              {confidenceLabel && (
-                <div className="absolute top-3 left-7 z-[1]">
-                  <div className={`${
-                    confidenceColor === 'green' ? 'bg-green-500' :
-                    confidenceColor === 'yellow' ? 'bg-yellow-500' :
-                    confidenceColor === 'red' ? 'bg-red-500' :
-                    'bg-green-500'
-                  } px-1 rounded-sm border-1 border-white`}>
-                    <p className="text-white text-xs font-medium uppercase">
-                      {confidenceLabel}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Time range or duration indicator */}
             {!showPlayer && (
@@ -278,6 +277,35 @@ const Video: React.FC<EnhancedVideoProps> = ({
               )
             )}
           </div>
+
+          {/* Overlay Labels - positioned outside video container */}
+          {/* Score Label - positioned at top-right */}
+          {confidenceLabel && (
+            <div className="absolute top-3 right-12 z-50">
+              <div
+                className="px-2 py-1 rounded-xl border-1 border-white"
+                style={{
+                  backgroundColor: confidenceColor === 'green' ? '#30710d' :
+                                 confidenceColor === 'yellow' ? '#826213' :
+                                 confidenceColor === 'red' ? '#484746' :
+                                 '#30710d'
+                }}
+              >
+                <p className="text-white text-xs font-bold uppercase">
+                  {confidenceLabel}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Creator Tag Overlay - positioned at top-left */}
+          {showCreatorTag && getCreatorName(finalVideoDetails) && (
+            <div className="absolute top-3 left-12 z-50">
+              <span className="px-2 py-1 text-sm bg-custom-orange rounded-xl font-bold">
+                {getCreatorName(finalVideoDetails)}
+              </span>
+            </div>
+          )}
 
           {/* Video Title */}
           {showTitle && (

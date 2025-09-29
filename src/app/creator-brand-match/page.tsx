@@ -16,8 +16,53 @@ import VideoModalSimple from '@/components/VideoModalSimple';
 import { VideoData, EmbeddingSearchResult, VideoPage } from '@/types';
 import LoadingSpinner from '@/components/LoadingSpinner';
 
+// Component to render brand tag overlay
+const BrandTagOverlay: React.FC<{ videoId: string; indexId: string; }> = ({ videoId, indexId }) => {
+  const { data: videoDetails } = useQuery<VideoData, Error>({
+    queryKey: ["videoDetails", videoId],
+    queryFn: () => fetchVideoDetails(videoId, indexId),
+    enabled: !!videoId && !!indexId,
+  });
+
+  const getFirstBrandTag = (videoData: VideoData | undefined) => {
+    if (!videoData || !videoData.user_metadata) return null;
+
+    try {
+      // Extract first brand from brand_product_events
+      if (videoData.user_metadata.brand_product_events) {
+        const events = JSON.parse(videoData.user_metadata.brand_product_events as string) as unknown[];
+        if (Array.isArray(events) && events.length > 0) {
+          const firstEvent = events[0];
+          if (firstEvent && typeof firstEvent === 'object' && 'brand' in firstEvent && typeof (firstEvent as { brand: unknown; }).brand === 'string') {
+            const brand = String((firstEvent as { brand: string; }).brand).trim();
+            if (brand.length > 0) {
+              return brand;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to parse brand_product_events:', error);
+    }
+
+    return null;
+  };
+
+  const firstBrand = getFirstBrandTag(videoDetails);
+
+  if (!firstBrand) return null;
+
+  return (
+    <div className="absolute top-3 left-6 z-10">
+      <span className="px-2 py-1 text-sm bg-custom-green rounded-xl font-bold">
+        {firstBrand}
+      </span>
+    </div>
+  );
+};
+
 // Component to render video tags
-const VideoWithTags: React.FC<{ videoId: string; indexId: string }> = ({ videoId, indexId }) => {
+const VideoWithTags: React.FC<{ videoId: string; indexId: string; }> = ({ videoId, indexId }) => {
   const { data: videoDetails } = useQuery<VideoData, Error>({
     queryKey: ["videoDetails", videoId],
     queryFn: () => fetchVideoDetails(videoId, indexId),
@@ -40,8 +85,8 @@ const VideoWithTags: React.FC<{ videoId: string; indexId: string }> = ({ videoId
           const events = JSON.parse(videoData.user_metadata.brand_product_events as string) as unknown[];
           if (Array.isArray(events)) {
             events.forEach((event: unknown) => {
-              if (event && typeof event === 'object' && 'brand' in event && typeof (event as { brand: unknown }).brand === 'string') {
-                brands.add(String((event as { brand: string }).brand).trim());
+              if (event && typeof event === 'object' && 'brand' in event && typeof (event as { brand: unknown; }).brand === 'string') {
+                brands.add(String((event as { brand: string; }).brand).trim());
               }
             });
           }
@@ -51,140 +96,140 @@ const VideoWithTags: React.FC<{ videoId: string; indexId: string }> = ({ videoId
       }
 
       const allTags = Object.entries(videoData.user_metadata)
-      .filter(([key, value]) => {
-        // Filter out certain keys and null/undefined values
-        const excludeKeys = ['source', 'brand_product_events', 'analysis', 'brand_product_analyzed_at', 'brand_product_source'];
-        return !excludeKeys.includes(key) && value != null;
-      })
-      .flatMap(([, value]) => {
-        // Handle different data types properly
-        let processedValue: string[] = [];
+        .filter(([key, value]) => {
+          // Filter out certain keys and null/undefined values
+          const excludeKeys = ['source', 'brand_product_events', 'analysis', 'brand_product_analyzed_at', 'brand_product_source'];
+          return !excludeKeys.includes(key) && value != null;
+        })
+        .flatMap(([, value]) => {
+          // Handle different data types properly
+          let processedValue: string[] = [];
 
-        if (typeof value === 'string') {
-          // Check if it's a JSON string
-          if (value.startsWith('[') && value.endsWith(']')) {
-            try {
-              const parsedArray = JSON.parse(value);
-              if (Array.isArray(parsedArray)) {
-                processedValue = parsedArray
-                  .filter(item => typeof item === 'string' && item.trim().length > 0)
-                  .map(item => item.trim());
+          if (typeof value === 'string') {
+            // Check if it's a JSON string
+            if (value.startsWith('[') && value.endsWith(']')) {
+              try {
+                const parsedArray = JSON.parse(value);
+                if (Array.isArray(parsedArray)) {
+                  processedValue = parsedArray
+                    .filter(item => typeof item === 'string' && item.trim().length > 0)
+                    .map(item => item.trim());
+                }
+              } catch {
+                console.warn('Failed to parse JSON array:', value);
+                // Fall back to treating as comma-separated string
+                processedValue = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
               }
-            } catch {
-              console.warn('Failed to parse JSON array:', value);
-              // Fall back to treating as comma-separated string
+            } else if (value.startsWith('{') && value.endsWith('}')) {
+              // Skip JSON objects - they're too complex for pills
+              return [];
+            } else {
+              // Regular string - split by commas
               processedValue = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
             }
-          } else if (value.startsWith('{') && value.endsWith('}')) {
-            // Skip JSON objects - they're too complex for pills
+          } else if (typeof value === 'number' || typeof value === 'boolean') {
+            processedValue = [value.toString()];
+          } else if (Array.isArray(value)) {
+            // Handle arrays directly
+            processedValue = value
+              .filter(item => item != null)
+              .map(item => typeof item === 'string' ? item.trim() : String(item))
+              .filter(item => item.length > 0);
+          } else if (typeof value === 'object') {
+            // Skip complex objects that shouldn't be displayed as tags
             return [];
           } else {
-            // Regular string - split by commas
-            processedValue = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
+            processedValue = [String(value)];
           }
-        } else if (typeof value === 'number' || typeof value === 'boolean') {
-          processedValue = [value.toString()];
-        } else if (Array.isArray(value)) {
-          // Handle arrays directly
-          processedValue = value
-            .filter(item => item != null)
-            .map(item => typeof item === 'string' ? item.trim() : String(item))
-            .filter(item => item.length > 0);
-        } else if (typeof value === 'object') {
-          // Skip complex objects that shouldn't be displayed as tags
-          return [];
-        } else {
-          processedValue = [String(value)];
-        }
 
-        // Skip if no valid values
-        if (processedValue.length === 0) {
-          return [];
-        }
+          // Skip if no valid values
+          if (processedValue.length === 0) {
+            return [];
+          }
 
-        return processedValue
-          .map((tag: string) => {
-            // Trim and validate each tag
-            const trimmedTag = tag.trim();
-            if (trimmedTag.length === 0 || trimmedTag.length > 50) {
-              return ''; // Skip empty or overly long tags
-            }
+          return processedValue
+            .map((tag: string) => {
+              // Trim and validate each tag
+              const trimmedTag = tag.trim();
+              if (trimmedTag.length === 0 || trimmedTag.length > 50) {
+                return ''; // Skip empty or overly long tags
+              }
 
-            // Filter out unwanted tags (case insensitive)
-            const lowerTag = trimmedTag.toLowerCase();
-            const unwantedPatterns = [
-              'not explicitly visible',
-              'not explicitly',
-              'explicitly visible',
-              'none',
-              'not visible'
-            ];
+              // Filter out unwanted tags (case insensitive)
+              const lowerTag = trimmedTag.toLowerCase();
+              const unwantedPatterns = [
+                'not explicitly visible',
+                'not explicitly',
+                'explicitly visible',
+                'none',
+                'not visible'
+              ];
 
-            if (unwantedPatterns.some(pattern => lowerTag.includes(pattern))) {
-              return ''; // Skip unwanted tags
-            }
+              if (unwantedPatterns.some(pattern => lowerTag.includes(pattern))) {
+                return ''; // Skip unwanted tags
+              }
 
-            // Properly capitalize - first lowercase everything then capitalize first letter of each word
-            const properlyCapitalized = trimmedTag
-              .toLowerCase()
-              .split(' ')
-              .map((word: string) => {
-                if (word.length === 0) return word;
-                return word.charAt(0).toUpperCase() + word.slice(1);
-              })
-              .join(' ');
+              // Properly capitalize - first lowercase everything then capitalize first letter of each word
+              const properlyCapitalized = trimmedTag
+                .toLowerCase()
+                .split(' ')
+                .map((word: string) => {
+                  if (word.length === 0) return word;
+                  return word.charAt(0).toUpperCase() + word.slice(1);
+                })
+                .join(' ');
 
-            return properlyCapitalized;
-          })
-          .filter((tag: string) => tag !== '');
-      })
-      .filter(tag => tag.length > 0) // Remove any empty tags
-      .slice(0, 10); // Limit to 10 tags maximum to prevent UI overflow
+              return properlyCapitalized;
+            })
+            .filter((tag: string) => tag !== '');
+        })
+        .filter(tag => tag.length > 0) // Remove any empty tags
+        .slice(0, 10); // Limit to 10 tags maximum to prevent UI overflow
 
-    // Add brands to tags (brands first)
-    const brandTags = Array.from(brands).map(brand => brand.trim()).filter(brand => brand.length > 0);
+      // Add brands to tags (brands first)
+      const brandTags = Array.from(brands).map(brand => brand.trim()).filter(brand => brand.length > 0);
 
-    // Filter out unwanted tags from all tags (including brands)
-    const unwantedPatterns = [
-      'not explicitly visible',
-      'not explicitly',
-      'explicitly visible',
-      'none',
-      'not visible'
-    ];
+      // Filter out unwanted tags from all tags (including brands)
+      const unwantedPatterns = [
+        'not explicitly visible',
+        'not explicitly',
+        'explicitly visible',
+        'none',
+        'not visible'
+      ];
 
-    const filteredBrandTags = brandTags.filter(tag =>
-      !unwantedPatterns.some(pattern => tag.toLowerCase().includes(pattern))
-    );
+      const filteredBrandTags = brandTags.filter(tag =>
+        !unwantedPatterns.some(pattern => tag.toLowerCase().includes(pattern))
+      );
 
-    const filteredAllTags = allTags.filter(tag =>
-      !unwantedPatterns.some(pattern => tag.toLowerCase().includes(pattern))
-    );
+      const filteredAllTags = allTags.filter(tag =>
+        !unwantedPatterns.some(pattern => tag.toLowerCase().includes(pattern))
+      );
 
-    const combinedTags = [...filteredBrandTags, ...filteredAllTags].slice(0, 10); // Limit to 10 tags total
+      const combinedTags = [...filteredBrandTags, ...filteredAllTags].slice(0, 10); // Limit to 10 tags total
 
-    // Return null if no valid tags found
-    if (combinedTags.length === 0) {
-      console.log('🏷️ No valid tags found');
-      return null;
-    }
+      // Return null if no valid tags found
+      if (combinedTags.length === 0) {
+        console.log('🏷️ No valid tags found');
+        return null;
+      }
 
-    console.log('🏷️ Found tags:', combinedTags);
+      console.log('🏷️ Found tags:', combinedTags);
 
-    return (
-      <div className="mt-1 pb-1">
-        <div className="flex flex-wrap gap-2">
-          {combinedTags.map((tag, idx) => (
-            <div
-              key={`${tag}-${idx}`}
-              className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors"
-            >
-              {tag}
-            </div>
-          ))}
+      return (
+        <div className="mt-1 pb-1">
+          <div className="flex flex-wrap gap-2">
+            {combinedTags.map((tag, idx) => (
+              <div
+                key={`${tag}-${idx}`}
+                className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors"
+              >
+                {tag}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-    );
+      );
     } catch (error) {
       console.error('❌ Error rendering tags for video:', videoData?._id, error);
       return (
@@ -282,7 +327,7 @@ export default function CreatorBrandMatch() {
 
   // Handle opening video modal
   const handleOpenVideoModal = (videoId: string) => {
-    const video = videosData?.pages.flatMap((page: { data: VideoData[] }) => page.data)
+    const video = videosData?.pages.flatMap((page: { data: VideoData[]; }) => page.data)
       .find((video: VideoData) => video._id === videoId);
 
     if (video && video.hls?.video_url) {
@@ -496,11 +541,10 @@ export default function CreatorBrandMatch() {
                   setSimilarResults([]);
                   setEmbeddingsReady(false);
                 }}
-                className={`px-6 py-3 rounded-md font-medium transition-colors ${
-                  sourceType === 'brand'
+                className={`px-6 py-3 rounded-md font-medium transition-colors ${sourceType === 'brand'
                     ? 'bg-black text-white'
                     : 'text-gray-700 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 Brand → Creator
               </button>
@@ -511,11 +555,10 @@ export default function CreatorBrandMatch() {
                   setSimilarResults([]);
                   setEmbeddingsReady(false);
                 }}
-                className={`px-6 py-3 rounded-md font-medium transition-colors ${
-                  sourceType === 'creator'
+                className={`px-6 py-3 rounded-md font-medium transition-colors ${sourceType === 'creator'
                     ? 'bg-black text-white'
                     : 'text-gray-700 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 Creator → Brand
               </button>
@@ -545,10 +588,10 @@ export default function CreatorBrandMatch() {
                 </button>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2.5">
-                        <div
-                          className="bg-black h-2.5 rounded-full"
-                          style={{ width: `${(targetEmbeddingsProgress.processed / targetEmbeddingsProgress.total) * 100}%` }}
-                        ></div>
+                <div
+                  className="bg-black h-2.5 rounded-full"
+                  style={{ width: `${(targetEmbeddingsProgress.processed / targetEmbeddingsProgress.total) * 100}%` }}
+                ></div>
               </div>
             </div>
           )}
@@ -557,31 +600,32 @@ export default function CreatorBrandMatch() {
 
       {/* Main Content Layout - Left: Reference Video, Right: Results */}
       <div className="flex-1 flex gap-8 min-h-0 container mx-auto px-4 -mt-8">
-          {/* Left Side - Reference Video Selection */}
-          <div className="w-1/2 flex flex-col">
-            <h2 className="text-xl font-semibold mb-4">
-              Select {sourceType === 'brand' ? 'Brand' : 'Creator'} Video
-            </h2>
+        {/* Left Side - Reference Video Selection */}
+        <div className="w-1/2 flex flex-col">
+          <h2 className="text-xl font-semibold mb-4">
+            Select {sourceType === 'brand' ? 'Brand' : 'Creator'} Video
+          </h2>
 
-            {/* Video Dropdown */}
-            <div className="mb-6 flex-shrink-0">
-              <VideosDropDown
-                indexId={sourceIndexId}
-                onVideoChange={handleVideoChange}
-                videosData={videosData || { pages: [], pageParams: [] }}
-                fetchNextPage={fetchNextPage}
-                hasNextPage={!!hasNextPage}
-                isFetchingNextPage={isFetchingNextPage}
-                isLoading={isLoadingVideos}
-                selectedFile={null}
-                taskId={null}
-                footageVideoId={selectedVideoId}
-              />
-            </div>
+          {/* Video Dropdown */}
+          <div className="mb-6 flex-shrink-0">
+            <VideosDropDown
+              indexId={sourceIndexId}
+              onVideoChange={handleVideoChange}
+              videosData={videosData || { pages: [], pageParams: [] }}
+              fetchNextPage={fetchNextPage}
+              hasNextPage={!!hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              isLoading={isLoadingVideos}
+              selectedFile={null}
+              taskId={null}
+              footageVideoId={selectedVideoId}
+            />
+          </div>
 
-            {/* Selected Video Preview */}
-            {selectedVideoId && (
-              <div className="flex flex-col items-center flex-shrink-0">
+          {/* Selected Video Preview */}
+          {selectedVideoId && (
+            <div className="flex flex-col items-center flex-shrink-0">
+              <div className="relative">
                 <Video
                   videoId={selectedVideoId}
                   indexId={sourceIndexId}
@@ -590,59 +634,63 @@ export default function CreatorBrandMatch() {
                   size="large"
                   showPlayer={true}
                 />
-                {/* Video Tags - using Video component's data */}
-                <VideoWithTags
-                  videoId={selectedVideoId}
-                  indexId={sourceIndexId}
-                />
-              </div>
-            )}
-
-            {/* Find Matches Button */}
-            <div className="flex justify-center flex-shrink-0 mt-4">
-              <button
-                onClick={handleFindMatches}
-                disabled={!selectedVideoId || isAnalyzing}
-                        className={`px-6 py-3 rounded-lg font-semibold ${
-                          !selectedVideoId || isAnalyzing
-                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                            : 'bg-black text-white hover:bg-gray-800'
-                        }`}
-              >
-                {isAnalyzing ? (
-                  <span className="flex items-center">
-                    <LoadingSpinner size="sm" className="mr-2" />
-                    Finding Matches...
-                  </span>
-                ) : (
-                  'Find Matches'
+                {/* Brand Tag Overlay - only show for Brand → Creator mode */}
+                {sourceType === 'brand' && (
+                  <BrandTagOverlay videoId={selectedVideoId} indexId={sourceIndexId} />
                 )}
-              </button>
+              </div>
+              {/* Video Tags - using Video component's data */}
+              <VideoWithTags
+                videoId={selectedVideoId}
+                indexId={sourceIndexId}
+              />
             </div>
-          </div>
+          )}
 
-          {/* Right Side - Search Results */}
-          <div className="w-1/2 flex flex-col">
-            {similarResults.length > 0 ? (
-              <div className="flex flex-col h-full">
-                <h2 className="text-xl font-semibold mb-4 flex-shrink-0">
-                  {sourceType === 'brand' ? 'Creator' : 'Brand'} Matches
-                </h2>
-                        <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
-                          <SimilarVideoResults results={similarResults} indexId={targetIndexId} sourceType={sourceType} />
-                        </div>
-              </div>
-            ) : !isAnalyzing && embeddingsReady ? (
-              <div className="text-center text-gray-600 mt-8">
-                No matching {sourceType === 'brand' ? 'creators' : 'brands'} found. Try selecting a different video.
-              </div>
-            ) : (
-              <div className="text-center text-gray-500 mt-8">
-                Select a video and click &quot;Find Matches&quot; to see results.
-              </div>
-            )}
+          {/* Find Matches Button */}
+          <div className="flex justify-center flex-shrink-0 mt-4">
+            <button
+              onClick={handleFindMatches}
+              disabled={!selectedVideoId || isAnalyzing}
+              className={`px-6 py-3 rounded-lg font-semibold ${!selectedVideoId || isAnalyzing
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-black text-white hover:bg-gray-800'
+                }`}
+            >
+              {isAnalyzing ? (
+                <span className="flex items-center">
+                  <LoadingSpinner size="sm" className="mr-2" />
+                  Finding Matches...
+                </span>
+              ) : (
+                'Find Matches'
+              )}
+            </button>
           </div>
         </div>
+
+        {/* Right Side - Search Results */}
+        <div className="w-1/2 flex flex-col">
+          {similarResults.length > 0 ? (
+            <div className="flex flex-col h-full">
+              <h2 className="text-xl font-semibold mb-4 flex-shrink-0">
+                {sourceType === 'brand' ? 'Creator' : 'Brand'} Matches
+              </h2>
+              <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin">
+                <SimilarVideoResults results={similarResults} indexId={targetIndexId} sourceType={sourceType} />
+              </div>
+            </div>
+          ) : !isAnalyzing && embeddingsReady ? (
+            <div className="text-center text-gray-600 mt-8">
+              No matching {sourceType === 'brand' ? 'creators' : 'brands'} found. Try selecting a different video.
+            </div>
+          ) : (
+            <div className="text-center text-gray-500 mt-8">
+              Select a video and click &quot;Find Matches&quot; to see results.
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Video Modal */}
       {modalVideo && (
