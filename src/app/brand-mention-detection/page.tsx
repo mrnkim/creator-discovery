@@ -1240,84 +1240,73 @@ export default function BrandMentionDetectionPage() {
                       <div
                         key={video._id}
                         className={clsx(
-                          'border rounded-lg overflow-hidden cursor-pointer transition-all',
-                          selectedVideoId === video._id ? 'border-blue-500 ring-2 ring-blue-300' : 'border-gray-200 hover:border-blue-300'
+                          ' overflow-hidden cursor-pointer transition-all',
                         )}
                         onClick={() => {
                           setSelectedVideoId(video._id);
                           setViewMode('per-video');
                         }}
                       >
-                        <div className="aspect-video bg-gray-100 relative">
+                        <div className="aspect-video bg-gray-100 relative rounded-[45.60px]">
                           {video.hls?.thumbnail_urls?.[0] && (
                             <img
                               src={video.hls.thumbnail_urls[0]}
                               alt={video.system_metadata?.video_title || 'Video thumbnail'}
-                              className="w-full h-full object-cover"
+                              className="w-full h-full object-cover rounded-[45.60px]"
                             />
                           )}
-                          {/* Format badge */}
-                          {video.system_metadata?.width && video.system_metadata?.height && (
-                            <div className="absolute bottom-2 right-2">
-                              <span className={clsx(
-                                'px-2 py-1 text-xs font-bold text-white rounded-md',
-                                video.system_metadata.width >= video.system_metadata.height ? 'bg-blue-600' : 'bg-purple-600'
-                              )}>
-                                {video.system_metadata.width >= video.system_metadata.height ? 'Horizontal' : 'Vertical'}
-                              </span>
-                            </div>
-                          )}
-                          {/* Brand count badge */}
-                          {eventsByVideo[video._id] && (
-                            <div className="absolute top-2 right-2">
-                              <span className="px-2 py-1 text-xs font-bold bg-green-600 text-white rounded-full">
-                                {new Set(eventsByVideo[video._id].map(e => e.brand)).size} brands
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="p-3">
-                          <h4 className="font-medium truncate">
-                            {video.system_metadata?.filename?.replace(/\.mp4$/i, '') || `Video ${video._id}`}
-                          </h4>
-                          <p className="text-xs text-gray-500 truncate">
-                            Creator:{' '}
-                            {(() => {
-                              const creator = video.user_metadata?.creator ||
-                                              video.user_metadata?.video_creator ||
-                                              video.user_metadata?.creator_id ||
-                                              'Unknown';
-                              return String(creator);
-                            })()}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            Duration: {Math.round(video.system_metadata?.duration || 0)}s
-                          </p>
 
-                          {/* Analysis data */}
-                          {analysisByVideo[video._id] && (
-                            <div className="mt-2 space-y-1">
-                              {analysisByVideo[video._id].tones && analysisByVideo[video._id].tones!.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {analysisByVideo[video._id].tones!.map((tone: string, index: number) => (
-                                    <span key={index} className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-800 rounded">
-                                      {tone}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              {analysisByVideo[video._id].styles && analysisByVideo[video._id].styles!.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {analysisByVideo[video._id].styles!.map((style: string, index: number) => (
-                                    <span key={index} className="px-1.5 py-0.5 text-xs bg-purple-100 text-purple-800 rounded">
-                                      {style}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
+                          {/* Creator name label - top left */}
+                          <div className="absolute top-3 left-6 z-10">
+                            <span className="px-2 py-1 text-sm bg-custom-orange rounded-xl font-bold">
+                              {(() => {
+                                const creator = video.user_metadata?.creator ||
+                                                video.user_metadata?.video_creator ||
+                                                video.user_metadata?.creator_id ||
+                                                'Creator';
+                                return String(creator);
+                              })()}
+                            </span>
+                          </div>
+
+                          {/* Brand count badge - top right */}
+                          {eventsByVideo[video._id] && (
+                            <div className="absolute top-3 right-6 z-10">
+                              <span className="px-2 py-1 text-sm bg-custom-green rounded-xl">
+                                {new Set(eventsByVideo[video._id].map(e => e.brand)).size} Brands
+                              </span>
                             </div>
                           )}
                         </div>
+
+                        {/* Tags below video */}
+                        {analysisByVideo[video._id] && (
+                          <div className="mt-1 pb-1 px-3">
+                            <div className="flex flex-wrap gap-2">
+                              {/* Tones tags */}
+                              {analysisByVideo[video._id].tones && analysisByVideo[video._id].tones!.length > 0 && (
+                                <>
+                                  {analysisByVideo[video._id].tones!.map((tone: string, index: number) => (
+                                    <div key={`tone-${index}`} className="inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black">
+                                      {tone}
+                                    </div>
+                                  ))}
+                                </>
+                              )}
+
+                              {/* Styles tags */}
+                              {analysisByVideo[video._id].styles && analysisByVideo[video._id].styles!.length > 0 && (
+                                <>
+                                  {analysisByVideo[video._id].styles!.map((style: string, index: number) => (
+                                    <div key={`style-${index}`} className="inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black">
+                                      {style}
+                                    </div>
+                                  ))}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
