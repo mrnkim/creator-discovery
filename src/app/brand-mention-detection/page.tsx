@@ -838,34 +838,6 @@ export default function BrandMentionDetectionPage() {
             <>
               {/* View mode toggle */}
               <div className="mb-6 flex justify-between items-center">
-                <div className="flex items-center space-x-4">
-                  <h2 className="text-xl font-semibold">
-                    {viewMode === 'library' ? 'Library View' : 'Per-Video View'}
-                  </h2>
-                  <div className="flex items-center bg-gray-100 p-1 rounded-lg">
-                    <button
-                      onClick={() => setViewMode('library')}
-                      className={clsx(
-                        'px-4 py-2 rounded-md text-sm font-medium',
-                        viewMode === 'library' ? 'bg-blue-600 text-white' : 'text-gray-700'
-                      )}
-                    >
-                      Library
-                    </button>
-                    <button
-                      onClick={() => setViewMode('per-video')}
-                      className={clsx(
-                        'px-4 py-2 rounded-md text-sm font-medium',
-                        viewMode === 'per-video' ? 'bg-blue-600 text-white' : 'text-gray-700',
-                        !selectedVideoId && 'opacity-50 cursor-not-allowed'
-                      )}
-                      disabled={!selectedVideoId}
-                    >
-                      Per-Video
-                    </button>
-                  </div>
-                </div>
-
                 {viewMode === 'per-video' && selectedVideoId && (
                   <div className="flex items-center space-x-4">
                     <button

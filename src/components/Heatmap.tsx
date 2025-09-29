@@ -20,7 +20,7 @@ interface HeatmapProps {
   columns: number;
   onCellClick?: (rowId: string, colIndex: number) => void;
   className?: string;
-  colorHue?: number; // Optional hue value for HSL color (default: 210 - blue)
+  colorHue?: number; // Optional hue value for HSL color (default: 0 - neutral for zinc)
   videoDuration?: number; // Optional video duration for accurate bucket duration calculation
   viewMode?: 'library' | 'per-video'; // View mode to determine tooltip content
 }
@@ -36,7 +36,7 @@ const Heatmap: React.FC<HeatmapProps> = ({
   columns,
   onCellClick,
   className,
-  colorHue = 210, // Default to blue
+  colorHue = 0, // Default to neutral for zinc colors
   videoDuration,
   viewMode = 'per-video', // Default to per-video view
 }) => {
@@ -51,17 +51,24 @@ const Heatmap: React.FC<HeatmapProps> = ({
     }) || null;
   };
 
-  // Function to normalize values per row and get color
+  // Function to normalize values per row and get color using zinc colors
   const getColorForValue = (value: number, maxValue: number): string => {
-    if (maxValue === 0) return `hsl(${colorHue}, 100%, 95%)`; // Very light for zero values
+    if (maxValue === 0) return 'var(--zinc-50)'; // Very light zinc for zero values
 
     // Normalize value between 0 and 1
     const normalizedValue = Math.min(value / maxValue, 1);
 
-    // Map to lightness: 95% (very light) to 40% (darker)
-    const lightness = 95 - (normalizedValue * 55);
-
-    return `hsl(${colorHue}, 100%, ${lightness}%)`;
+    // Map to zinc color scale based on intensity
+    if (normalizedValue <= 0.1) return 'var(--zinc-50)';
+    if (normalizedValue <= 0.2) return 'var(--zinc-100)';
+    if (normalizedValue <= 0.3) return 'var(--zinc-200)';
+    if (normalizedValue <= 0.4) return 'var(--zinc-300)';
+    if (normalizedValue <= 0.5) return 'var(--zinc-400)';
+    if (normalizedValue <= 0.6) return 'var(--zinc-500)';
+    if (normalizedValue <= 0.7) return 'var(--zinc-600)';
+    if (normalizedValue <= 0.8) return 'var(--zinc-700)';
+    if (normalizedValue <= 0.9) return 'var(--zinc-800)';
+    return 'var(--zinc-900)'; // Darkest for highest values
   };
 
   return (
