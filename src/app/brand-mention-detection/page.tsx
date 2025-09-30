@@ -1201,7 +1201,7 @@ export default function BrandMentionDetectionPage() {
                         min="0"
                         value={timeWindow.start}
                         onChange={(e) => setTimeWindow(prev => ({ ...prev, start: Math.max(0, parseInt(e.target.value) || 0) }))}
-                        className="w-20 px-2 py-1 border border-gray-300 rounded"
+                        className="w-20 px-2 py-1 border border-gray-300 rounded-xl"
                       />
                       <span>to</span>
                       <input
@@ -1213,7 +1213,7 @@ export default function BrandMentionDetectionPage() {
                           const value = e.target.value === '' ? null : Math.max(timeWindow.start + 1, parseInt(e.target.value) || 0);
                           setTimeWindow(prev => ({ ...prev, end: value }));
                         }}
-                        className="w-20 px-2 py-1 border border-gray-300 rounded"
+                        className="w-20 px-2 py-1 border border-gray-300 rounded-xl"
                       />
                     </div>
                   </div>
@@ -1240,7 +1240,7 @@ export default function BrandMentionDetectionPage() {
                   <>
                     <h3 className="text-lg font-semibold mb-4">
                       {viewMode === 'library'
-                        ? `Brand Mention Heatmap (${heatmapData.length} videos)`
+                        ? `Brand Mention Heatmap`
                         : 'Brand Mentions'
                       }
                     </h3>
@@ -1254,7 +1254,7 @@ export default function BrandMentionDetectionPage() {
                         viewMode={viewMode}
                       />
                     </div>
-                    <p className="text-xs text-gray-500 text-center">
+                    <p className="text-sm text-gray-600">
                       {viewMode === 'library'
                         ? 'Click on a cell to view detailed brand mentions for that video'
                         : 'Click on a cell to view the video segment with the brand mention'
@@ -1267,7 +1267,6 @@ export default function BrandMentionDetectionPage() {
               {/* Video grid (library view only) */}
               {viewMode === 'library' && (
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Videos</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {filteredVideos.map(video => (
                       <div

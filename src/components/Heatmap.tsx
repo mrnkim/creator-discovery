@@ -76,13 +76,13 @@ const Heatmap: React.FC<HeatmapProps> = ({
       <div
         className="grid"
         style={{
-          gridTemplateColumns: `160px repeat(${columns}, 1fr)`,
+          gridTemplateColumns: `160px repeat(${columns}, 34px)`,
         }}
         role="grid"
         aria-label="Heatmap visualization"
       >
         {/* Header row with column numbers */}
-        <div className="bg-gray-100 p-2 font-medium text-sm border-b border-r border-gray-200" role="columnheader">
+        <div className="bg-gray-100 p-2 font-medium text-sm border-b border-r border-gray-200 sticky left-0 z-20" role="columnheader">
           {/* Empty cell for top-left corner */}
         </div>
 
@@ -106,7 +106,7 @@ const Heatmap: React.FC<HeatmapProps> = ({
             <React.Fragment key={row.id}>
               {/* Row label */}
               <div
-                className="p-2 font-medium text-sm border-b border-r border-gray-200 truncate"
+                className="p-2 font-medium text-sm border-b border-r border-gray-200 truncate sticky left-0 bg-white z-10"
                 role="rowheader"
                 title={row.label || row.id}
               >
@@ -124,12 +124,12 @@ const Heatmap: React.FC<HeatmapProps> = ({
                   <div
                     key={`${row.id}-${colIndex}`}
                     className={clsx(
-                      'border-b border-r border-gray-200',
-                      onCellClick ? 'cursor-pointer hover:opacity-80' : ''
+                      'border-b border-r border-gray-200 min-w-0',
+                      onCellClick && row.id !== '__TOTAL__' ? 'cursor-pointer hover:opacity-80' : ''
                     )}
-                    style={{ backgroundColor }}
+                    style={{ backgroundColor, minWidth: '34px', width: '34px' }}
                     role="gridcell"
-                    onClick={() => onCellClick?.(row.id, colIndex)}
+                    onClick={() => row.id !== '__TOTAL__' && onCellClick?.(row.id, colIndex)}
                     aria-label={`Duration ${Math.round(value)}s at position ${colIndex}`}
                     title={bucket ? (() => {
                       if (viewMode === 'library') {
@@ -173,9 +173,9 @@ const Heatmap: React.FC<HeatmapProps> = ({
                         return duration;
                       }
                     })() : 'No data'}
-                    tabIndex={onCellClick ? 0 : undefined}
+                    tabIndex={onCellClick && row.id !== '__TOTAL__' ? 0 : undefined}
                     onKeyDown={(e) => {
-                      if (onCellClick && (e.key === 'Enter' || e.key === ' ')) {
+                      if (onCellClick && row.id !== '__TOTAL__' && (e.key === 'Enter' || e.key === ' ')) {
                         onCellClick(row.id, colIndex);
                         e.preventDefault();
                       }
