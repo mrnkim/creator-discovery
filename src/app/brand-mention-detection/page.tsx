@@ -55,6 +55,7 @@ export default function BrandMentionDetectionPage() {
   const [isEditingCreator, setIsEditingCreator] = useState<boolean>(false);
   const [editingCreator, setEditingCreator] = useState<string>('');
   const [isUpdatingCreator, setIsUpdatingCreator] = useState<boolean>(false);
+  const [isFiltersExpanded, setIsFiltersExpanded] = useState<boolean>(false);
 
   // Modal state
   const [modalVideo, setModalVideo] = useState<{
@@ -1026,7 +1027,23 @@ export default function BrandMentionDetectionPage() {
               ) : (
               <div className="mb-8 bg-gray-50 p-4 rounded-lg">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-semibold">Filters</h3>
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-semibold">Filters</h3>
+                    <button
+                      onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
+                      className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                    >
+                      <span>{isFiltersExpanded ? 'Hide' : 'Show'}</span>
+                      <svg 
+                        className={`w-4 h-4 transition-transform ${isFiltersExpanded ? 'rotate-180' : ''}`}
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
                   <button
                     onClick={resetFilters}
                     className="text-sm text-gray-600 hover:text-gray-800"
@@ -1035,7 +1052,11 @@ export default function BrandMentionDetectionPage() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Collapsible filter content */}
+                <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                  isFiltersExpanded ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0'
+                }`}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Creator filter */}
                   <div>
                     <h4 className="text-sm font-medium mb-2">Creators</h4>
@@ -1185,6 +1206,7 @@ export default function BrandMentionDetectionPage() {
                       />
                     </div>
                   </div>
+                </div>
                 </div>
               </div>
               )}
