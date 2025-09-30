@@ -1014,7 +1014,7 @@ export default function BrandMentionDetectionPage() {
                           className={clsx(
                             'px-2 py-1 text-xs rounded-full',
                             selectedBrands.includes(brand)
-                              ? 'bg-blue-600 text-white'
+                              ? 'bg-custom-green text-white'
                               : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                           )}
                         >
@@ -1034,10 +1034,10 @@ export default function BrandMentionDetectionPage() {
                       className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800 transition-colors"
                     >
                       <span>{isFiltersExpanded ? 'Hide' : 'Show'}</span>
-                      <svg 
+                      <svg
                         className={`w-4 h-4 transition-transform ${isFiltersExpanded ? 'rotate-180' : ''}`}
-                        fill="none" 
-                        stroke="currentColor" 
+                        fill="none"
+                        stroke="currentColor"
                         viewBox="0 0 24 24"
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -1068,7 +1068,7 @@ export default function BrandMentionDetectionPage() {
                           className={clsx(
                             'px-2 py-1 text-xs rounded-full',
                             selectedCreators.includes(creator)
-                              ? 'bg-blue-600 text-white'
+                              ? 'bg-custom-orange text-white'
                               : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                           )}
                         >
@@ -1087,12 +1087,23 @@ export default function BrandMentionDetectionPage() {
                           key={format}
                           onClick={() => toggleFormat(format)}
                           className={clsx(
-                            'px-2 py-1 text-xs rounded-full',
+                            'px-2 py-1 text-xs rounded-full flex items-center gap-1',
                             selectedFormats.includes(format)
-                              ? 'bg-blue-600 text-white'
+                              ? 'bg-gray-700 text-white'
                               : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                           )}
                         >
+                          {format === 'vertical' ? (
+                            // Vertical icon
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                              <rect x="6" y="3" width="12" height="18" rx="2" />
+                            </svg>
+                          ) : (
+                            // Horizontal icon
+                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                              <rect x="3" y="6" width="18" height="12" rx="2" />
+                            </svg>
+                          )}
                           {format === 'vertical' ? 'Vertical' : 'Horizontal'}
                         </button>
                       ))}
@@ -1110,7 +1121,7 @@ export default function BrandMentionDetectionPage() {
                           className={clsx(
                             'px-2 py-1 text-xs rounded-full',
                             selectedStyles.includes(style)
-                              ? 'bg-purple-600 text-white'
+                              ? 'bg-gray-700 text-white'
                               : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                           )}
                         >
@@ -1131,7 +1142,7 @@ export default function BrandMentionDetectionPage() {
                           className={clsx(
                             'px-2 py-1 text-xs rounded-full',
                             selectedTones.includes(tone)
-                              ? 'bg-blue-600 text-white'
+                              ? 'bg-gray-700 text-white'
                               : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                           )}
                         >
@@ -1152,7 +1163,7 @@ export default function BrandMentionDetectionPage() {
                           className={clsx(
                             'px-2 py-1 text-xs rounded-full',
                             selectedBrands.includes(brand)
-                              ? 'bg-blue-600 text-white'
+                              ? 'bg-custom-green text-white'
                               : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                           )}
                         >
@@ -1176,7 +1187,7 @@ export default function BrandMentionDetectionPage() {
                       step="0.1"
                       value={durationThreshold}
                       onChange={(e) => setDurationThreshold(parseFloat(e.target.value))}
-                      className="w-full"
+                      className="w-full accent-gray-700"
                     />
                   </div>
 
@@ -1297,6 +1308,25 @@ export default function BrandMentionDetectionPage() {
                               <span className="px-2 py-1 text-sm bg-custom-green rounded-xl">
                                 {new Set(eventsByVideo[video._id].map(e => e.brand)).size} Brands
                               </span>
+                            </div>
+                          )}
+
+                          {/* Format label - bottom right */}
+                          {video.system_metadata?.width && video.system_metadata?.height && (
+                            <div className="absolute bottom-3 right-6 z-10">
+                              <div className="px-2 py-1 bg-white opacity-70 rounded-xl">
+                                {video.system_metadata.width >= video.system_metadata.height ? (
+                                  // Horizontal (landscape) icon - rectangle with horizontal orientation
+                                  <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
+                                    <rect x="3" y="6" width="18" height="12" rx="2" />
+                                  </svg>
+                                ) : (
+                                  // Vertical (portrait) icon - rectangle with vertical orientation
+                                  <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
+                                    <rect x="6" y="3" width="12" height="18" rx="2" />
+                                  </svg>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
