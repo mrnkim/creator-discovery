@@ -19,6 +19,13 @@ interface VideoModalProps {
   location?: string;
 }
 
+// Helper function to format seconds to MM:SS
+const formatTime = (seconds: number): string => {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+};
+
 const VideoModalSimple: React.FC<VideoModalProps> = ({
   videoUrl,
   isOpen,
@@ -108,23 +115,14 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
         <div className="m-2 ml-4 p-4 flex justify-between items-start">
           <div className="flex-1">
             <h3 className="text-2xl font-medium mb-2">
-              {title?.split(':')[0] || title}
+              {title?.includes(':') ? `${title.split(':')[0]} | ${title.split(':')[1]?.trim()}` : title}
             </h3>
-            {title?.includes(':') && (
-              <div className="text-lg text-gray-600 mb-2">
-                {title.split(':')[1]?.trim()}
-              </div>
-            )}
             {description && (
-              <div className="text-sm text-gray-500 mb-2">
+              <div className="text-sm mb-2">
                 {description}
               </div>
             )}
-            {location && (
-              <div className="text-sm text-blue-600 mb-2">
-                📍 {location}
-              </div>
-            )}
+
           </div>
           <button
             onClick={onClose}
@@ -175,14 +173,22 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
     controlsList="nodownload"
   />
 
-</div>
-
-          {/* Segment info below video player */}
+          {/* Segment overlay on video */}
           {(startTime !== undefined || endTime !== undefined) && (
-            <div className="mt-3 text-xs text-gray-400 text-center">
-              Segment: {Math.max(0, startTime ?? 0).toFixed(2)}s – {endTime?.toFixed(2) ?? 'End'}s
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/40 rounded-lg px-3 py-1 shadow-lg border border-white">
+              <div className="text-sm font-medium text-white">
+                {formatTime(startTime ?? 0)} - {formatTime(endTime ?? 0)}
+              </div>
             </div>
           )}
+
+
+</div>
+{location && (
+              <div className="text-md mt-2 p-1">
+                📍 {location}
+              </div>
+            )}
         </div>
       </div>
     </div>
