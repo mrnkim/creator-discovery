@@ -1196,7 +1196,7 @@ export default function BrandMentionDetectionPage() {
               {/* Video grid (library view only) */}
               {viewMode === 'library' && (
                 <div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                     {filteredVideos.map(video => (
                       <div
                         key={video._id}
@@ -1259,34 +1259,14 @@ export default function BrandMentionDetectionPage() {
                           )}
                         </div>
 
-                        {/* Tags below video */}
-                        {analysisByVideo[video._id] && (
-                          <div className="mt-1 pb-1 px-3">
-                            <div className="flex flex-wrap gap-2">
-                              {/* Tones tags */}
-                              {analysisByVideo[video._id].tones && analysisByVideo[video._id].tones!.length > 0 && (
-                                <>
-                                  {analysisByVideo[video._id].tones!.map((tone: string, index: number) => (
-                                    <div key={`tone-${index}`} className="inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black">
-                                      {tone}
-                                    </div>
-                                  ))}
-                                </>
-                              )}
-
-                              {/* Styles tags */}
-                              {analysisByVideo[video._id].styles && analysisByVideo[video._id].styles!.length > 0 && (
-                                <>
-                                  {analysisByVideo[video._id].styles!.map((style: string, index: number) => (
-                                    <div key={`style-${index}`} className="inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black">
-                                      {style}
-                                    </div>
-                                  ))}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        )}
+                        {/* Video title below video */}
+                        <div className="mt-2 px-3">
+                          <h3 className="text-sm font-medium text-gray-800 truncate">
+                            {video.system_metadata?.filename?.replace(/\.mp4$/i, '') ||
+                             video.system_metadata?.video_title ||
+                             `Video ${video._id}`}
+                          </h3>
+                        </div>
                       </div>
                     ))}
                   </div>
