@@ -30,6 +30,17 @@ export default function BrandMentionDetectionPage() {
   // Optional description content for the page (not provided via props in App Router)
   const description: string | undefined = undefined;
 
+  // Debug environment variables
+  console.log('🔧 Environment variables debug:', {
+    creatorIndexId,
+    hasCreatorIndexId: !!creatorIndexId,
+    allEnvVars: {
+      NEXT_PUBLIC_CREATOR_INDEX_ID: process.env.NEXT_PUBLIC_CREATOR_INDEX_ID,
+      NODE_ENV: process.env.NODE_ENV
+    },
+    timestamp: new Date().toISOString()
+  });
+
   // Video and event data
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [eventsByVideo, setEventsByVideo] = useState<Record<string, ProductEvent[]>>({});
@@ -67,6 +78,16 @@ export default function BrandMentionDetectionPage() {
     description?: string;
     location?: string;
   } | null>(null);
+
+  // Debug: Monitor analysisByVideo changes
+  useEffect(() => {
+    console.log('🔄 analysisByVideo state changed:', {
+      selectedVideoId,
+      currentAnalysis: analysisByVideo[selectedVideoId || ''],
+      allKeys: Object.keys(analysisByVideo),
+      timestamp: new Date().toISOString()
+    });
+  }, [analysisByVideo, selectedVideoId]);
 
   // Derived data
   const availableCreators = useMemo(() => {
@@ -396,33 +417,68 @@ export default function BrandMentionDetectionPage() {
 
   // Update creator for a video
   async function updateVideoCreator(videoId: string, newCreator: string) {
-    if (!creatorIndexId) return;
+    if (!creatorIndexId) {
+      console.error('❌ No creator index ID available');
+      setError('Creator index ID is not configured');
+      return;
+    }
 
     setIsUpdatingCreator(true);
     console.log(`🔄 Updating creator for video ${videoId} to: ${newCreator}`);
+    console.log(`📋 Request payload:`, {
+      videoId,
+      indexId: creatorIndexId,
+      user_metadata: { creator: newCreator }
+    });
 
     try {
-      const response = await axios.put('/api/videos/updateUserMetadata', {
+      const requestPayload = {
         videoId,
         indexId: creatorIndexId,
         user_metadata: {
           creator: newCreator
         }
+      };
+
+      console.log(`🚀 Making API request to /api/videos/updateUserMetadata`);
+      const response = await axios.put('/api/videos/updateUserMetadata', requestPayload, {
+        timeout: 30000, // 30 second timeout
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log(`📥 API Response:`, {
+        status: response.status,
+        statusText: response.statusText,
+        data: response.data,
+        headers: response.headers
       });
 
       if (response.data && response.data.success) {
+        console.log(`✅ API call successful, updating local state...`);
+
         // Update local state
-        setAnalysisByVideo(prevAnalysis => ({
-          ...prevAnalysis,
-          [videoId]: {
-            ...prevAnalysis[videoId],
-            creator: newCreator
-          }
-        }));
+        setAnalysisByVideo(prevAnalysis => {
+          const currentAnalysis = prevAnalysis[videoId] || {};
+          const updated = {
+            ...prevAnalysis,
+            [videoId]: {
+              ...currentAnalysis,
+              creator: newCreator
+            }
+          };
+          console.log(`📊 Updated analysisByVideo:`, {
+            before: currentAnalysis,
+            after: updated[videoId],
+            videoId
+          });
+          return updated;
+        });
 
         // Update videos array as well
-        setVideos(prevVideos =>
-          prevVideos.map(video =>
+        setVideos(prevVideos => {
+          const updated = prevVideos.map(video =>
             video._id === videoId
               ? {
                   ...video,
@@ -432,16 +488,31 @@ export default function BrandMentionDetectionPage() {
                   }
                 }
               : video
-          )
-        );
+          );
+          console.log(`📊 Updated videos array:`, updated.find(v => v._id === videoId)?.user_metadata);
+          return updated;
+        });
 
         setIsEditingCreator(false);
         setEditingCreator('');
         console.log(`✅ Creator updated successfully for video ${videoId}`);
+      } else {
+        console.error(`❌ API response indicates failure:`, response.data);
+        setError(`Failed to update creator: ${response.data?.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error(`❌ Error updating creator for video ${videoId}:`, error);
-      setError(`Failed to update creator: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      if (axios.isAxiosError(error)) {
+        console.error(`❌ Axios error details:`, {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          message: error.message
+        });
+        setError(`Failed to update creator: ${error.response?.data?.error || error.message}`);
+      } else {
+        setError(`Failed to update creator: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     } finally {
       setIsUpdatingCreator(false);
     }
@@ -933,16 +1004,39 @@ export default function BrandMentionDetectionPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
-                            {analysisByVideo[selectedVideoId]?.creator ? (
-                              <span className="px-2 py-1 text-xs bg-gray-200 text-gray-800 rounded-full">
-                                {analysisByVideo[selectedVideoId].creator}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-gray-500">Unknown</span>
-                            )}
+                            {(() => {
+                              // Get creator from videos array (user_metadata.creator) instead of analysisByVideo
+                              const video = videos.find(v => v._id === selectedVideoId);
+                              const currentCreator = video?.user_metadata?.creator ||
+                                                   video?.user_metadata?.video_creator ||
+                                                   video?.user_metadata?.creator_id ||
+                                                   analysisByVideo[selectedVideoId]?.creator;
+
+                              console.log('🎭 Current creator display debug:', {
+                                videoId: selectedVideoId,
+                                video: video?.user_metadata,
+                                analysisByVideo: analysisByVideo[selectedVideoId],
+                                currentCreator,
+                                hasCreator: !!currentCreator,
+                                allAnalysisKeys: Object.keys(analysisByVideo),
+                                timestamp: new Date().toISOString()
+                              });
+                              return currentCreator ? (
+                                <span className="px-2 py-1 text-xs bg-gray-200 text-gray-800 rounded-full">
+                                  {currentCreator}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-gray-500">Unknown</span>
+                              );
+                            })()}
                             <button
                               onClick={() => {
-                                setEditingCreator(analysisByVideo[selectedVideoId]?.creator || '');
+                                const video = videos.find(v => v._id === selectedVideoId);
+                                const currentCreator = video?.user_metadata?.creator ||
+                                                     video?.user_metadata?.video_creator ||
+                                                     video?.user_metadata?.creator_id ||
+                                                     analysisByVideo[selectedVideoId]?.creator || '';
+                                setEditingCreator(currentCreator);
                                 setIsEditingCreator(true);
                               }}
                               className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
