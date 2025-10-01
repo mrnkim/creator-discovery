@@ -66,16 +66,6 @@ export function aggregatePerVideo(
 
   // Create time buckets in seconds
   const bucketDuration = duration / numBuckets;
-  console.log(`🔍 Per-Video View - Video bucket calculation:`, {
-    duration,
-    numBuckets,
-    bucketDuration,
-    events: events.map(e => ({
-      brand: e.brand,
-      start: e.timeline_start,
-      end: e.timeline_end
-    }))
-  });
 
   const buckets = Array.from({ length: numBuckets }, (_, i) => ({
     startSec: i * bucketDuration,
@@ -99,14 +89,6 @@ export function aggregatePerVideo(
   const rows: PerVideoHeatmapRow[] = [];
 
   Object.entries(groupedEvents).forEach(([key, groupEvents]) => {
-    console.log(`🔍 Processing brand group: ${key}`, {
-      eventCount: groupEvents.length,
-      events: groupEvents.map(e => ({
-        start: e.timeline_start,
-        end: e.timeline_end,
-        duration: e.timeline_end - e.timeline_start
-      }))
-    });
 
     // First, assign each event to its best matching bucket to avoid duplicates
     const eventToBucketMap = new Map<number, number>(); // eventIndex -> bucketIndex
@@ -131,17 +113,6 @@ export function aggregatePerVideo(
 
       if (bestBucketIndex >= 0) {
         eventToBucketMap.set(eventIndex, bestBucketIndex);
-
-        console.log(`📊 Per-Video View - Event ${event.brand} (${event.timeline_start}-${event.timeline_end}) assigned to bucket ${bestBucketIndex}:`, {
-          bucket: {
-            startSec: buckets[bestBucketIndex].startSec.toFixed(2),
-            endSec: buckets[bestBucketIndex].endSec.toFixed(2),
-            startPct: buckets[bestBucketIndex].startPct.toFixed(1),
-            endPct: buckets[bestBucketIndex].endPct.toFixed(1)
-          },
-          overlap: bestOverlap.toFixed(2),
-          bucketDuration: bucketDuration.toFixed(2)
-        });
       }
     });
 
@@ -161,7 +132,6 @@ export function aggregatePerVideo(
 
       // If multiple events are assigned to the same bucket, use the count as intensity
       if (eventCount > 1) {
-        console.log(`⚠️ Multiple events (${eventCount}) assigned to bucket ${bucketIndex} for ${key}`);
         // This shouldn't happen with better bucket granularity, but handle it gracefully
         value = eventCount; // Use event count as intensity
       }
@@ -236,16 +206,6 @@ export function aggregateLibrary(
 
     // Create time buckets in seconds (same as per-video view)
     const bucketDuration = duration / numBuckets;
-    console.log(`🔍 Library View - Video ${videoId} bucket calculation:`, {
-      duration,
-      numBuckets,
-      bucketDuration,
-      events: filteredEvents.map(e => ({
-        brand: e.brand,
-        start: e.timeline_start,
-        end: e.timeline_end
-      }))
-    });
 
     // First, assign each event to its best matching bucket (same logic as per-video view)
     const eventToBucketMap = new Map<number, number>(); // eventIndex -> bucketIndex
@@ -273,16 +233,6 @@ export function aggregateLibrary(
 
       if (bestBucketIndex >= 0) {
         eventToBucketMap.set(eventIndex, bestBucketIndex);
-        console.log(`📊 Library View - Event ${event.brand} (${event.timeline_start}-${event.timeline_end}) assigned to bucket ${bestBucketIndex}:`, {
-          bucket: {
-            startSec: (bestBucketIndex * bucketDuration).toFixed(2),
-            endSec: ((bestBucketIndex + 1) * bucketDuration).toFixed(2),
-            startPct: ((bestBucketIndex * bucketDuration / duration) * 100).toFixed(1),
-            endPct: (((bestBucketIndex + 1) * bucketDuration / duration) * 100).toFixed(1)
-          },
-          overlap: bestOverlap.toFixed(2),
-          bucketDuration: bucketDuration.toFixed(2)
-        });
       }
     });
 

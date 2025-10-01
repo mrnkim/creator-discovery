@@ -40,13 +40,6 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Development/test environment response
-    console.log('🔧 Environment variables check:', {
-      hasApiKey: !!API_KEY,
-      hasBaseUrl: !!TWELVELABS_API_BASE_URL,
-      apiKeyLength: API_KEY?.length || 0,
-      baseUrl: TWELVELABS_API_BASE_URL
-    });
 
     if (!API_KEY || !TWELVELABS_API_BASE_URL) {
       console.error('❌ Missing API key or base URL in environment variables');

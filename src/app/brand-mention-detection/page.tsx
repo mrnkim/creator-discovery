@@ -30,17 +30,6 @@ export default function BrandMentionDetectionPage() {
   // Optional description content for the page (not provided via props in App Router)
   const description: string | undefined = undefined;
 
-  // Debug environment variables
-  console.log('🔧 Environment variables debug:', {
-    creatorIndexId,
-    hasCreatorIndexId: !!creatorIndexId,
-    allEnvVars: {
-      NEXT_PUBLIC_CREATOR_INDEX_ID: process.env.NEXT_PUBLIC_CREATOR_INDEX_ID,
-      NODE_ENV: process.env.NODE_ENV
-    },
-    timestamp: new Date().toISOString()
-  });
-
   // Video and event data
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [eventsByVideo, setEventsByVideo] = useState<Record<string, ProductEvent[]>>({});
@@ -78,16 +67,6 @@ export default function BrandMentionDetectionPage() {
     description?: string;
     location?: string;
   } | null>(null);
-
-  // Debug: Monitor analysisByVideo changes
-  useEffect(() => {
-    console.log('🔄 analysisByVideo state changed:', {
-      selectedVideoId,
-      currentAnalysis: analysisByVideo[selectedVideoId || ''],
-      allKeys: Object.keys(analysisByVideo),
-      timestamp: new Date().toISOString()
-    });
-  }, [analysisByVideo, selectedVideoId]);
 
   // Derived data
   const availableCreators = useMemo(() => {
@@ -382,7 +361,6 @@ export default function BrandMentionDetectionPage() {
     if (!creatorIndexId) return;
 
     setIsAnalyzing(true);
-    console.log(`🔄 Force analyzing video ${videoId}...`);
 
     try {
       const response = await axios.post('/api/brand-mentions/analyze', {
@@ -405,7 +383,6 @@ export default function BrandMentionDetectionPage() {
           }));
         }
 
-        console.log(`✅ Force analysis completed for video ${videoId}:`, response.data);
       }
     } catch (error) {
       console.error(`❌ Error force analyzing video ${videoId}:`, error);
@@ -424,12 +401,6 @@ export default function BrandMentionDetectionPage() {
     }
 
     setIsUpdatingCreator(true);
-    console.log(`🔄 Updating creator for video ${videoId} to: ${newCreator}`);
-    console.log(`📋 Request payload:`, {
-      videoId,
-      indexId: creatorIndexId,
-      user_metadata: { creator: newCreator }
-    });
 
     try {
       const requestPayload = {
@@ -440,7 +411,6 @@ export default function BrandMentionDetectionPage() {
         }
       };
 
-      console.log(`🚀 Making API request to /api/videos/updateUserMetadata`);
       const response = await axios.put('/api/videos/updateUserMetadata', requestPayload, {
         timeout: 30000, // 30 second timeout
         headers: {
@@ -448,15 +418,7 @@ export default function BrandMentionDetectionPage() {
         }
       });
 
-      console.log(`📥 API Response:`, {
-        status: response.status,
-        statusText: response.statusText,
-        data: response.data,
-        headers: response.headers
-      });
-
       if (response.data && response.data.success) {
-        console.log(`✅ API call successful, updating local state...`);
 
         // Update local state
         setAnalysisByVideo(prevAnalysis => {
@@ -468,11 +430,6 @@ export default function BrandMentionDetectionPage() {
               creator: newCreator
             }
           };
-          console.log(`📊 Updated analysisByVideo:`, {
-            before: currentAnalysis,
-            after: updated[videoId],
-            videoId
-          });
           return updated;
         });
 
@@ -489,13 +446,11 @@ export default function BrandMentionDetectionPage() {
                 }
               : video
           );
-          console.log(`📊 Updated videos array:`, updated.find(v => v._id === videoId)?.user_metadata);
           return updated;
         });
 
         setIsEditingCreator(false);
         setEditingCreator('');
-        console.log(`✅ Creator updated successfully for video ${videoId}`);
       } else {
         console.error(`❌ API response indicates failure:`, response.data);
         setError(`Failed to update creator: ${response.data?.error || 'Unknown error'}`);
@@ -550,21 +505,6 @@ export default function BrandMentionDetectionPage() {
     const duration = videoDurations[selectedVideoId!] || 0;
     if (duration <= 0) return;
 
-    console.log('🔍 DEBUG: Emirates events analysis', {
-        rowId,
-      brandEvents: brandEvents.map((e, idx) => ({
-        index: idx,
-          brand: e.brand,
-          start: e.timeline_start,
-          end: e.timeline_end,
-        duration: e.timeline_end - e.timeline_start,
-        expectedBucket: Math.floor(e.timeline_start / (duration / NUM_BUCKETS)),
-        expectedBucketEnd: Math.floor(e.timeline_end / (duration / NUM_BUCKETS))
-      })),
-      videoDuration: duration,
-      bucketSize: duration / NUM_BUCKETS
-    });
-
     // Find the event that was actually assigned to this colIndex bucket in the heatmap
     // Use the same logic as heatmap generation to ensure consistency
 
@@ -576,18 +516,6 @@ export default function BrandMentionDetectionPage() {
       startPct: (i * bucketDurationSec / duration) * 100,
       endPct: ((i + 1) * bucketDurationSec / duration) * 100
     }));
-
-    console.log(`🔧 Click Handler - Bucket calculation for colIndex ${colIndex}:`, {
-      duration,
-      numBuckets: NUM_BUCKETS,
-      bucketDurationSec,
-      clickedBucket: {
-        startSec: buckets[colIndex].startSec,
-        endSec: buckets[colIndex].endSec,
-        startPct: buckets[colIndex].startPct,
-        endPct: buckets[colIndex].endPct
-      }
-    });
 
     // Use the EXACT same logic as heatmap generation to find which event was assigned to this bucket
     // First, create the event-to-bucket mapping exactly like in heatmap.ts
@@ -608,15 +536,6 @@ export default function BrandMentionDetectionPage() {
 
       if (bestBucketIndex >= 0) {
         eventToBucketMap.set(eventIndex, bestBucketIndex);
-        console.log(`🎯 Click Handler - Event ${event.brand} (${event.timeline_start}-${event.timeline_end}) assigned to bucket ${bestBucketIndex}:`, {
-          bucket: {
-            startSec: buckets[bestBucketIndex].startSec.toFixed(2),
-            endSec: buckets[bestBucketIndex].endSec.toFixed(2),
-            startPct: buckets[bestBucketIndex].startPct.toFixed(1),
-            endPct: buckets[bestBucketIndex].endPct.toFixed(1)
-          },
-          overlap: bestOverlap.toFixed(2)
-        });
       }
     });
 
@@ -628,43 +547,15 @@ export default function BrandMentionDetectionPage() {
       }
     });
 
-    // Log the mapping details
-    console.log('🔧 DEBUG: Direct bucket assignment');
-    console.log(`  Clicked colIndex: ${colIndex}`);
-    console.log(`  Clicked bucket: ${buckets[colIndex].startSec.toFixed(2)}-${buckets[colIndex].endSec.toFixed(2)}s`);
-    console.log('  Event to Bucket Mapping:');
-    Array.from(eventToBucketMap.entries()).forEach(([
-      eventIndex,
-      bucketIndex
-    ]: [number, number]) => {
-      console.log(`    Event ${eventIndex} (${brandEvents[eventIndex].timeline_start}-${brandEvents[eventIndex].timeline_end}s) → Bucket ${bucketIndex}`);
-    });
-    console.log(`  Assigned event for bucket ${colIndex}:`, assignedEvent ? `${(assignedEvent as ProductEvent).timeline_start}-${(assignedEvent as ProductEvent).timeline_end}s` : 'None');
-
-    if (assignedEvent) {
-      console.log(`🏆 Click Handler - Final selected event: ${(assignedEvent as ProductEvent).timeline_start}-${(assignedEvent as ProductEvent).timeline_end}s (${(assignedEvent as ProductEvent).brand})`);
-    } else {
-      console.log(`🚫 Click Handler - No event assigned to bucket ${colIndex}`);
-    }
-
-    // Also log which buckets should have values
-    const bucketsWithEvents = Array.from(new Set(eventToBucketMap.values())).sort((a, b) => a - b);
-    console.log(`  Buckets that should be colored: [${bucketsWithEvents.join(', ')}]`);
-
-    if (!assignedEvent) {
-      console.log('🚫 No event assigned to this bucket');
-      return;
-    }
-
     // Use the clicked bucket boundaries
     const correctedBucketStartSec = buckets[colIndex].startSec;
     const correctedBucketEndSec = buckets[colIndex].endSec;
     const correctedBucketCenter = (correctedBucketStartSec + correctedBucketEndSec) / 2;
 
     // Use the assigned event directly (no need for complex selection logic)
-    const event: ProductEvent = assignedEvent as ProductEvent;
+    if (!assignedEvent) return;
+    const event: ProductEvent = assignedEvent;
 
-    console.log(`🏆 Final selected event: ${event.timeline_start}-${event.timeline_end}`);
 
     // Create a more precise segment based on the bucket
     // const preciseStart = Math.max(event.timeline_start, correctedBucketStartSec);
@@ -688,41 +579,6 @@ export default function BrandMentionDetectionPage() {
       finalEnd = correctedBucketEndSec;
     }
     // Otherwise, use the full event duration
-
-    console.log('🎬 BrandMentionDetection: Setting modal video', {
-      videoId: selectedVideoId,
-      videoUrl: video.hls?.video_url,
-      hlsData: video.hls,
-      event: event,
-      title: `${event.brand}: ${event.product_name}`,
-      bucketInfo: {
-        colIndex,
-        bucketStartSec: correctedBucketStartSec,
-        bucketEndSec: correctedBucketEndSec,
-        bucketCenter: correctedBucketCenter,
-        duration
-      },
-      timingInfo: {
-        originalEvent: { start: event.timeline_start, end: event.timeline_end },
-        bucket: { start: correctedBucketStartSec, end: correctedBucketEndSec },
-        final: { start: finalStart, end: finalEnd },
-        bucketDuration,
-        eventDuration,
-        videoDuration: duration,
-        eventSpansMostOfVideo: eventDuration > duration * 0.8,
-        bucketMuchSmallerThanEvent: bucketDuration < eventDuration * 0.3
-      },
-      allBrandEvents: brandEvents,
-      assignedEvent: event
-    });
-
-    console.log('🔍 Setting modal video with event:', {
-      brand: event.brand,
-      product_name: event.product_name,
-      description: event.description,
-      location: event.location,
-      hasLocation: !!event.location
-    });
 
     setModalVideo({
       videoId: selectedVideoId!,
@@ -836,18 +692,6 @@ export default function BrandMentionDetectionPage() {
       // Per-video view: brands as rows, time buckets as columns
       const events = filteredEvents[selectedVideoId] || [];
       const videoDuration = videoDurations[selectedVideoId] || 0;
-
-      console.log('🔍 Generating heatmap data for video:', {
-        videoId: selectedVideoId,
-        videoDuration,
-        events: events.map(e => ({
-          brand: e.brand,
-          start: e.timeline_start,
-          end: e.timeline_end
-        })),
-        numBuckets: NUM_BUCKETS
-      });
-
       const perVideoRows = aggregatePerVideo(events, NUM_BUCKETS, 'brand', videoDuration);
 
       // Log the actual heatmap data for Emirates
@@ -856,7 +700,6 @@ export default function BrandMentionDetectionPage() {
         const nonZeroBuckets = emiratesHeatmapRow.buckets
           .map((bucket, index) => ({ index, ...bucket }))
           .filter(bucket => bucket.value > 0);
-        console.log('📊 Emirates heatmap buckets with values:', nonZeroBuckets);
       }
 
       const rowsWithTotal = perVideoRows.map(row => ({
@@ -1012,16 +855,7 @@ export default function BrandMentionDetectionPage() {
                                                    video?.user_metadata?.creator_id ||
                                                    analysisByVideo[selectedVideoId]?.creator;
 
-                              console.log('🎭 Current creator display debug:', {
-                                videoId: selectedVideoId,
-                                video: video?.user_metadata,
-                                analysisByVideo: analysisByVideo[selectedVideoId],
-                                currentCreator,
-                                hasCreator: !!currentCreator,
-                                allAnalysisKeys: Object.keys(analysisByVideo),
-                                timestamp: new Date().toISOString()
-                              });
-                              return currentCreator ? (
+                              return currentCreator && typeof currentCreator === 'string' ? (
                                 <span className="px-2 py-1 text-xs bg-gray-200 text-gray-800 rounded-full">
                                   {currentCreator}
                                 </span>
@@ -1036,7 +870,7 @@ export default function BrandMentionDetectionPage() {
                                                      video?.user_metadata?.video_creator ||
                                                      video?.user_metadata?.creator_id ||
                                                      analysisByVideo[selectedVideoId]?.creator || '';
-                                setEditingCreator(currentCreator);
+                                setEditingCreator(String(currentCreator));
                                 setIsEditingCreator(true);
                               }}
                               className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
