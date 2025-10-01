@@ -806,130 +806,131 @@ export default function BrandMentionDetectionPage() {
 
               {/* Video info section (per-video view) or Filters section (library view) */}
               {viewMode === 'per-video' && selectedVideoId ? (
-                <div className="mb-8 bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold mb-4">Video Information</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Creator */}
-                    <div>
-                      <h4 className="text-sm font-medium mb-2">Creator</h4>
-                      <div className="flex flex-wrap gap-2 items-center">
-                        {isEditingCreator ? (
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={editingCreator}
-                              onChange={(e) => setEditingCreator(e.target.value)}
-                              className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              placeholder="Enter creator name"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => updateVideoCreator(selectedVideoId, editingCreator)}
-                              disabled={isUpdatingCreator || !editingCreator.trim()}
-                              className={clsx(
-                                'px-2 py-1 text-xs rounded-xl',
-                                isUpdatingCreator || !editingCreator.trim()
-                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                  : 'bg-blue-600 text-white hover:bg-blue-700'
-                              )}
-                            >
-                              {isUpdatingCreator ? 'Saving...' : 'Save'}
-                            </button>
-                            <button
-                              onClick={() => {
-                                setIsEditingCreator(false);
-                                setEditingCreator('');
-                              }}
-                              className="px-2 py-1 text-xs bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            {(() => {
-                              // Get creator from videos array (user_metadata.creator) instead of analysisByVideo
-                              const video = videos.find(v => v._id === selectedVideoId);
-                              const currentCreator = video?.user_metadata?.creator ||
-                                                   video?.user_metadata?.video_creator ||
-                                                   video?.user_metadata?.creator_id ||
-                                                   analysisByVideo[selectedVideoId]?.creator;
-
-                              return currentCreator && typeof currentCreator === 'string' ? (
-                                <span className="px-2 py-1 text-xs bg-gray-200 text-gray-800 rounded-full">
-                                  {currentCreator}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-gray-500">Unknown</span>
-                              );
-                            })()}
-                            <button
-                              onClick={() => {
+                <>
+                  {/* Video Information - Creator, Styles, Tones */}
+                  <div className="mb-6 bg-gray-50 p-4 rounded-xl">
+                    <h3 className="font-semibold mb-4">Video Information</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Creator */}
+                      <div>
+                        <h4 className="text-sm font-medium mb-2">Creator</h4>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          {isEditingCreator ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={editingCreator}
+                                onChange={(e) => setEditingCreator(e.target.value)}
+                                className="px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="Enter creator name"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => updateVideoCreator(selectedVideoId, editingCreator)}
+                                disabled={isUpdatingCreator || !editingCreator.trim()}
+                                className={clsx(
+                                  'px-2 py-1 text-xs rounded-xl',
+                                  isUpdatingCreator || !editingCreator.trim()
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                                )}
+                              >
+                                {isUpdatingCreator ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setIsEditingCreator(false);
+                                  setEditingCreator('');
+                                }}
+                                className="px-2 py-1 text-xs bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              {(() => {
+                                // Get creator from videos array (user_metadata.creator) instead of analysisByVideo
                                 const video = videos.find(v => v._id === selectedVideoId);
                                 const currentCreator = video?.user_metadata?.creator ||
                                                      video?.user_metadata?.video_creator ||
                                                      video?.user_metadata?.creator_id ||
-                                                     analysisByVideo[selectedVideoId]?.creator || '';
-                                setEditingCreator(String(currentCreator));
-                                setIsEditingCreator(true);
-                              }}
-                              className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                              title="Edit creator"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                              </svg>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                                                     analysisByVideo[selectedVideoId]?.creator;
 
-                    {/* Video Styles */}
-                    <div>
-                      <h4 className="text-sm font-medium mb-2">Styles</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {analysisByVideo[selectedVideoId]?.styles && analysisByVideo[selectedVideoId].styles!.length > 0 ? (
-                          analysisByVideo[selectedVideoId].styles!.map((style: string, index: number) => (
-                            <span key={index} className="px-2 py-1 text-xs bg-gray-200 text-gray-800 rounded-full">
-                              {style}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-gray-500">No styles detected</span>
-                        )}
+                                return currentCreator && typeof currentCreator === 'string' ? (
+                                  <span className="px-3 py-1 text-sm bg-gray-100 border border-black rounded-full">
+                                    {currentCreator}
+                                  </span>
+                                ) : (
+                                  <span className="text-sm text-gray-500">Unknown</span>
+                                );
+                              })()}
+                              <button
+                                onClick={() => {
+                                  const video = videos.find(v => v._id === selectedVideoId);
+                                  const currentCreator = video?.user_metadata?.creator ||
+                                                       video?.user_metadata?.video_creator ||
+                                                       video?.user_metadata?.creator_id ||
+                                                       analysisByVideo[selectedVideoId]?.creator || '';
+                                  setEditingCreator(String(currentCreator));
+                                  setIsEditingCreator(true);
+                                }}
+                                className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                title="Edit creator"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Video Tones */}
-                    <div>
-                      <h4 className="text-sm font-medium mb-2">Tones</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {analysisByVideo[selectedVideoId]?.tones && analysisByVideo[selectedVideoId].tones!.length > 0 ? (
-                          analysisByVideo[selectedVideoId].tones!.map((tone: string, index: number) => (
-                            <span key={index} className="px-2 py-1 text-xs bg-gray-200 text-gray-800 rounded-full">
-                              {tone}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-gray-500">No tones detected</span>
-                        )}
+                      {/* Video Styles */}
+                      <div>
+                        <h4 className="text-sm font-medium mb-2">Styles</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {analysisByVideo[selectedVideoId]?.styles && analysisByVideo[selectedVideoId].styles!.length > 0 ? (
+                            analysisByVideo[selectedVideoId].styles!.map((style: string, index: number) => (
+                              <span key={index} className="px-3 py-1 text-sm bg-gray-100 border border-black rounded-full">
+                                {style}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-sm text-gray-500">No styles detected</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Video Tones */}
+                      <div>
+                        <h4 className="text-sm font-medium mb-2">Tones</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {analysisByVideo[selectedVideoId]?.tones && analysisByVideo[selectedVideoId].tones!.length > 0 ? (
+                            analysisByVideo[selectedVideoId].tones!.map((tone: string, index: number) => (
+                              <span key={index} className="px-3 py-1 text-sm bg-gray-100 border border-black rounded-full">
+                                {tone}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-sm text-gray-500">No tones detected</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Brand filter for current video */}
-                  <div className="mt-4">
+                  {/* Brand Filter - separate container */}
+                  <div className="mb-8 bg-gray-50 p-4 rounded-xl">
                     <div className="flex items-center gap-2 mb-2">
-                      <h4 className="text-sm font-medium">Brands</h4>
+                      <h4 className="text-md font-bold">Brands Filter</h4>
                       <button
                         onClick={() => setSelectedBrands([])}
-                        className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                        className="p-1 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
                         title="Clear all brand filters"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        Reset
                       </button>
                     </div>
                     <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
@@ -951,7 +952,7 @@ export default function BrandMentionDetectionPage() {
                       ))}
                     </div>
                   </div>
-                </div>
+                </>
               ) : (
               <div className="mb-8 bg-gray-50 p-4 rounded-lg">
                 <div className="flex justify-between items-center mb-4">
