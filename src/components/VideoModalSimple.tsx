@@ -360,61 +360,67 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
       >
         <div className="m-2 ml-4 p-4 flex justify-between items-start">
           <div className="flex-1">
-            <h3 className="text-2xl font-medium mb-2">
-              {title?.includes(':') ? `${title.split(':')[0]} | ${title.split(':')[1]?.trim()}` : title}
-            </h3>
+            {/* Title with Brand/Creator info before title */}
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              {/* Brand/Creator info as plain text before title */}
+              {(() => {
+                const typeText = indexId === process.env.NEXT_PUBLIC_BRAND_INDEX_ID ? 'Brand' : 'Creator';
+                const creatorName = getCreatorName(videoDetails);
+                const brandName = getBrandName(videoDetails);
+
+                // Always show if we have indexId, even without names
+                if (indexId) {
+                  const nameText = creatorName || brandName || 'Unknown';
+                  return (
+                    <span className="text-sm">
+                      {typeText} | {nameText}
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+
+              <h3 className="text-2xl font-medium">
+                {title?.includes(':') ? `${title.split(':')[0]} | ${title.split(':')[1]?.trim()}` : title}
+              </h3>
+            </div>
+
             {description && (
               <div className="text-sm mb-2">
                 {description}
               </div>
             )}
 
-            {/* Tags Section */}
+            {/* Tags Section - Reorganized */}
             <div className="mt-1 pb-1">
-              <div className="flex flex-wrap gap-2">
-                {/* Index Type Tag */}
-                {indexId && (
-                  <div className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors">
-                    {indexId === process.env.NEXT_PUBLIC_BRAND_INDEX_ID ? 'Brand' : 'Creator'}
-                  </div>
-                )}
 
+              {/* Second line: Confidence and Score */}
+              <div className="flex flex-wrap gap-2 mb-2">
                 {/* Confidence Tag - only show for search results */}
                 {confidence && (
                   <div
-                    className="mt-3 inline-block flex-shrink-0 rounded-full px-3 py-1 text-sm text-white"
+                    className="inline-block flex-shrink-0 rounded-full px-3 py-1 text-sm text-white"
                     style={{ backgroundColor: getConfidenceColor(confidence) }}
                   >
-                    {confidence}
+                    {confidence.toUpperCase()}
                   </div>
                 )}
 
-                {/* Score Tag - only show for search results */}
+                {/* Score as plain text - only show for search results */}
                 {score !== undefined && (
-                  <div className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors">
+                  <span className="text-sm">
                     Score: {score.toFixed(2)}
-                  </div>
+                  </span>
                 )}
+              </div>
 
-                {/* Creator Tag */}
-                {getCreatorName(videoDetails) && (
-                  <div className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors">
-                    {getCreatorName(videoDetails)}
-                  </div>
-                )}
-
-                {/* Brand Tag */}
-                {getBrandName(videoDetails) && (
-                  <div className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors">
-                    {getBrandName(videoDetails)}
-                  </div>
-                )}
-
+              {/* Third line: All other tags */}
+              <div className="flex flex-wrap gap-2">
                 {/* Styles Tags */}
                 {getStyles(videoDetails).map((style, idx) => (
                   <div
                     key={`style-${idx}`}
-                    className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors"
+                    className="inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors"
                   >
                     {style}
                   </div>
@@ -424,7 +430,7 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
                 {getTones(videoDetails).map((tone, idx) => (
                   <div
                     key={`tone-${idx}`}
-                    className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors"
+                    className="inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors"
                   >
                     {tone}
                   </div>
@@ -434,7 +440,7 @@ const VideoModalSimple: React.FC<VideoModalProps> = ({
                 {getOtherTags(videoDetails).map((tag, idx) => (
                   <div
                     key={`tag-${idx}`}
-                    className="mt-3 inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors"
+                    className="inline-block flex-shrink-0 bg-gray-100 border border-black rounded-full px-3 py-1 text-sm text-black hover:bg-gray-200 transition-colors"
                   >
                     {tag}
                   </div>
