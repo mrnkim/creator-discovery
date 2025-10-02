@@ -34,7 +34,8 @@ const VideoCard = React.memo<{
   onVideoClick: (result: SearchResult) => void;
   formatTime: (seconds: number) => string;
   getConfidenceClass: (confidence: string) => string;
-}>(({ result, index, brandIndexId, onVideoClick, formatTime, getConfidenceClass }) => {
+  getConfidenceStyle: (confidence: string) => { backgroundColor: string };
+}>(({ result, index, brandIndexId, onVideoClick, formatTime, getConfidenceClass, getConfidenceStyle }) => {
   // Debug logging for re-renders
   if (index === 0) {
     console.log('🔍 VideoCard re-rendered - first card of batch');
@@ -53,41 +54,52 @@ const VideoCard = React.memo<{
           className="w-full h-full object-cover"
         />
 
-        {/* Confidence Badge */}
-        <div className="absolute top-2 left-2">
+        {/* Index Badge - top left */}
+        <div className="absolute top-3 left-6 z-10">
           <span className={clsx(
-            'px-2 py-1 text-xs font-bold text-white rounded-md',
-            getConfidenceClass(result.confidence)
-          )}>
-            {result.confidence}
-          </span>
-        </div>
-
-        {/* Index Badge */}
-        <div className="absolute top-2 right-2">
-          <span className={clsx(
-            'px-2 py-1 text-xs font-bold text-white rounded-md',
-            result.index_id === brandIndexId ? 'bg-purple-600' : 'bg-green-600'
+            'px-2 py-1 text-xs font-bold text-black rounded-xl',
+            result.index_id === brandIndexId ? 'bg-custom-green' : 'bg-custom-orange'
           )}>
             {result.index_id === brandIndexId ? 'Brand' : 'Creator'}
           </span>
         </div>
 
-        {/* Time Range */}
-        <div className="absolute bottom-2 right-2">
-          <span className="px-2 py-1 text-xs font-bold text-white bg-black bg-opacity-60 rounded-md">
+        {/* Confidence Badge - top right */}
+        <div className="absolute top-3 right-6 z-10">
+          <span
+            className={clsx(
+              'px-2 py-1 text-xs font-bold rounded-xl border border-white',
+              getConfidenceClass(result.confidence)
+            )}
+            style={getConfidenceStyle(result.confidence)}
+          >
+            {result.confidence}
+          </span>
+        </div>
+
+        {/* Time Range - bottom center */}
+        <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 z-10">
+          <span className="px-2 py-1 text-xs font-bold text-white bg-transparent border border-white rounded-md">
             {formatTime(result.start)} - {formatTime(result.end)}
           </span>
         </div>
 
-        {/* Format Badge (if available) */}
+        {/* Format Badge - bottom right */}
         {result.format && (
-          <div className="absolute bottom-2 left-2">
-            <span className={clsx(
-              'px-2 py-1 text-xs font-bold text-white rounded-md bg-gray-700',
-            )}>
-              {result.format === 'vertical' ? 'Vertical' : 'Horizontal'}
-            </span>
+          <div className="absolute bottom-3 right-6 z-10">
+            <div className="px-2 py-1 bg-white opacity-70 rounded-xl">
+              {result.format === 'vertical' ? (
+                // Vertical (portrait) icon - rectangle with vertical orientation
+                <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="3" width="12" height="18" rx="2" />
+                </svg>
+              ) : (
+                // Horizontal (landscape) icon - rectangle with horizontal orientation
+                <svg className="w-4 h-4 text-black" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="3" y="6" width="18" height="12" rx="2" />
+                </svg>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -432,12 +444,6 @@ export default function SemanticSearchPage() {
           }
         });
 
-        console.log('🔍 Results separated:');
-        console.log('  - All results:', allResults.length);
-        console.log('  - Brand results:', brandResults.length);
-        console.log('  - Creator results:', creatorResults.length);
-        console.log('  - Brand index ID:', process.env.NEXT_PUBLIC_BRAND_INDEX_ID);
-        console.log('  - Creator index ID:', process.env.NEXT_PUBLIC_CREATOR_INDEX_ID);
 
         // 🔧 NEW: Extract and store total results from API response
         const brandIndexId = process.env.NEXT_PUBLIC_BRAND_INDEX_ID;
@@ -480,14 +486,6 @@ export default function SemanticSearchPage() {
 
         setHasMoreResults(hasMore);
 
-        console.log('🔍 Pagination state set:');
-        console.log('  - Current page:', 1);
-        console.log('  - Items per page:', itemsPerPage);
-        console.log('  - Server hasMore:', serverHasMore);
-        console.log('  - Client hasMore:', clientHasMore);
-        console.log('  - Final hasMore:', hasMore);
-        console.log('  - Brand results count:', brandResults.length);
-        console.log('  - Creator results count:', creatorResults.length);
 
         // Fetch video details for all results
         await fetchVideoDetailsForResults(allResults);
@@ -804,13 +802,26 @@ export default function SemanticSearchPage() {
   const getConfidenceClass = useCallback((confidence: string) => {
     switch (confidence.toLowerCase()) {
       case 'high':
-        return 'bg-green-500';
+        return 'text-white';
       case 'medium':
-        return 'bg-yellow-500';
+        return 'text-white';
       case 'low':
-        return 'bg-red-500';
+        return 'text-white';
       default:
-        return 'bg-gray-500';
+        return 'text-white';
+    }
+  }, []);
+
+  const getConfidenceStyle = useCallback((confidence: string) => {
+    switch (confidence.toLowerCase()) {
+      case 'high':
+        return { backgroundColor: '#30710d' };
+      case 'medium':
+        return { backgroundColor: '#826213' };
+      case 'low':
+        return { backgroundColor: '#484746' };
+      default:
+        return { backgroundColor: '#30710d' };
     }
   }, []);
 
@@ -851,55 +862,60 @@ export default function SemanticSearchPage() {
 
             {/* Search Input */}
             <div className="flex-1 w-full md:w-auto">
-              <div className="relative flex items-center">
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search videos..."
-                  className="w-full px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleTextSearch();
-                  }}
-                />
-                {/* Clear search button */}
-                {searchQuery && (
-                  <button
-                    onClick={clearSearch}
-                    className="absolute right-20 p-1 text-gray-400 hover:text-gray-600"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-                <button
-                  onClick={handleTextSearch}
-                  disabled={isSearching || !searchQuery.trim()}
-                  className={clsx(
-                    'px-4 py-2 rounded-r-lg',
-                    isSearching || !searchQuery.trim()
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                  )}
-                >
-                  {isSearching ? (
-                    <span className="flex items-center">
-                      <LoadingSpinner size="sm" className="mr-2" />
-                      Searching...
-                    </span>
-                  ) : (
-                    'Search'
-                  )}
-                </button>
-              </div>
+              <form onSubmit={(e) => { e.preventDefault(); handleTextSearch(); }} className="w-full">
+                <div className="self-stretch h-14 px-3 bg-gray-200 rounded-2xl inline-flex justify-start items-center gap-2.5 overflow-hidden w-full">
+                  <div className="flex-1 self-stretch px-3 flex justify-start items-center gap-5">
+                    {/* left area - search icon */}
+                    <div className="flex justify-start items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-stone-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+
+                    {/* input field */}
+                    <div className="flex-1 flex items-center relative">
+                      <input
+                        type="text"
+                        ref={searchInputRef}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-transparent border-none focus:outline-none text-stone-900 text-xl font-normal leading-7 tracking-tight placeholder-black pr-8"
+                        placeholder="What are you looking for?"
+                      />
+
+                      {/* Custom X button - show only when there is a search term */}
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={clearSearch}
+                          className="absolute right-0 flex items-center justify-center w-8 h-8 cursor-pointer"
+                        >
+                          <svg
+                            className="w-5 h-5 text-stone-900"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </form>
             </div>
 
             {/* Search by Image Button */}
             <button
               onClick={() => setIsImageModalOpen(true)}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg flex items-center"
+              className="h-14 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-2xl flex items-center"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
@@ -1067,6 +1083,7 @@ export default function SemanticSearchPage() {
                     onVideoClick={openVideoModal}
                     formatTime={formatTime}
                     getConfidenceClass={getConfidenceClass}
+                    getConfidenceStyle={getConfidenceStyle}
                   />
                 ))}
               </div>
@@ -1112,16 +1129,10 @@ export default function SemanticSearchPage() {
             </div>
           ) : (
             <div>
-              <div className="flex justify-between items-center mb-4">
+              <div className="mb-4">
                 <h2 className="text-xl font-semibold">
                   All Videos ({defaultVideos.length})
                 </h2>
-                <button
-                  onClick={() => fetchDefaultVideos()}
-                  className="text-sm text-gray-600 hover:text-gray-800"
-                >
-                  Refresh
-                </button>
               </div>
 
               {isLoadingDefault ? (
@@ -1138,43 +1149,46 @@ export default function SemanticSearchPage() {
                   <p>No videos to display</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                   {defaultVideos.map((video) => (
                     <div
                       key={`${video._id}-${video.index_id}`}
-                      className="relative rounded-lg overflow-hidden shadow-md cursor-pointer transform transition hover:scale-[1.02]"
+                      className="overflow-hidden cursor-pointer transition-all"
                       onClick={() => openDefaultVideoModal(video)}
                     >
-                      {/* Thumbnail */}
-                      <div className="relative aspect-video">
-                        <img
-                          src={video.hls?.thumbnail_urls?.[0] || '/videoFallback.jpg'}
-                          alt="Video thumbnail"
-                          className="w-full h-full object-cover"
-                        />
+                      <div className="aspect-video bg-gray-100 relative rounded-[45.60px]">
+                        {video.hls?.thumbnail_urls?.[0] && (
+                          <img
+                            src={video.hls.thumbnail_urls[0]}
+                            alt={video.system_metadata?.video_title || 'Video thumbnail'}
+                            className="w-full h-full object-cover rounded-[45.60px]"
+                          />
+                        )}
 
-                        {/* Index Badge */}
-                        <div className="absolute top-2 right-2">
+                        {/* Index Badge - top left */}
+                        <div className="absolute top-3 left-6 z-10">
                           <span className={clsx(
-                            'px-2 py-1 text-xs font-bold text-white rounded-md',
-                            video.index_id === brandIndexId ? 'bg-purple-600' : 'bg-green-600'
+                            'px-2 py-1 text-xs rounded-xl font-bold',
+                            video.index_id === brandIndexId ? 'bg-custom-green' : 'bg-custom-orange'
                           )}>
                             {video.index_id === brandIndexId ? 'Brand' : 'Creator'}
                           </span>
                         </div>
 
-                        {/* Duration */}
-                        <div className="absolute bottom-2 right-2">
-                          <span className="px-2 py-1 text-xs font-bold text-white bg-black bg-opacity-60 rounded-md">
+                        {/* Duration - bottom center */}
+                        <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 z-10">
+                          <span className="px-2 py-0.5 text-xs font-bold text-white bg-black/30 border border-white rounded-md">
                             {formatTime(Math.floor(video.system_metadata?.duration || 0))}
                           </span>
                         </div>
                       </div>
 
-                      {/* Title */}
-                      <div className="p-2">
-                        <h3 className="text-sm font-medium truncate">
-                          {video.system_metadata?.filename || video.system_metadata?.video_title || `Video ${video._id}`}
+                      {/* Video title below video */}
+                      <div className="mt-2 px-3">
+                        <h3 className="text-sm font-medium text-gray-800 truncate">
+                          {video.system_metadata?.filename?.replace(/\.mp4$/i, '') ||
+                           video.system_metadata?.video_title ||
+                           `Video ${video._id}`}
                         </h3>
                       </div>
                     </div>
@@ -1190,8 +1204,8 @@ export default function SemanticSearchPage() {
       {isImageModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">Search by Image</h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold">Upload image</h2>
               <button
                 onClick={() => setIsImageModalOpen(false)}
                 className="text-gray-500 hover:text-gray-700"
@@ -1208,46 +1222,76 @@ export default function SemanticSearchPage() {
               </div>
             )}
 
+            {/* Drag and Drop Area */}
             <div
               {...getRootProps()}
               className={clsx(
-                'border-2 border-dashed rounded-lg p-6 mb-4 flex flex-col items-center justify-center cursor-pointer',
+                'border-2 border-dashed rounded-lg p-8 mb-6 flex flex-col items-center justify-center cursor-pointer bg-gray-50',
                 isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300',
               )}
             >
               <input {...getInputProps()} />
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <p className="text-sm text-gray-600 text-center">
-                Drag & drop an image here, or click to select
+              <div className="flex items-center justify-center w-16 h-16 bg-gray-200 rounded-full mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <p className="text-lg font-medium text-gray-800 mb-4">
+                Drop an image or browse file
               </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Supported formats: JPG, PNG (max 5MB)
-              </p>
+
+              {/* Supported formats badges */}
+              <div className="flex flex-wrap gap-2 justify-center">
+                <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                  .png, .jpeg
+                </span>
+                <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                  Dimension &gt; 64x64px
+                </span>
+                <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                  File size ≤ 5 MB
+                </span>
+              </div>
             </div>
 
+            {/* Divider with "Or" */}
+            <div className="relative mb-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">Or</span>
+              </div>
+            </div>
+
+            {/* Image URL Input */}
             <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-2">Or enter an image URL:</p>
-              <div className="flex">
-                <input
-                  type="text"
-                  placeholder="https://example.com/image.jpg"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                />
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Drop an image link"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                  />
+                </div>
                 <button
                   onClick={handleImageUrlInput}
                   disabled={!imageUrl}
                   className={clsx(
-                    'px-4 py-2 rounded-r-lg',
+                    'px-6 py-3 rounded-lg text-sm font-medium',
                     !imageUrl
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : 'bg-blue-600 text-white hover:bg-blue-700'
                   )}
                 >
-                  Load
+                  Search
                 </button>
               </div>
             </div>

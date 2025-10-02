@@ -310,7 +310,7 @@ const Video: React.FC<EnhancedVideoProps> = ({
           {confidenceLabel && (
             <div className="absolute top-3 right-12 z-50">
               <div
-                className="px-2 py-1 rounded-xl border-1 border-white"
+                className="px-2 py-1 rounded-xl border border-white"
                 style={{
                   backgroundColor: confidenceColor === 'green' ? '#30710d' :
                                  confidenceColor === 'yellow' ? '#826213' :
