@@ -64,7 +64,7 @@ const BrandTagOverlay: React.FC<{ videoId: string; indexId: string; }> = ({ vide
 
 // Component to render video tags
 const VideoWithTags: React.FC<{ videoId: string; indexId: string; isAnalyzingTags?: boolean; }> = ({ videoId, indexId, isAnalyzingTags = false }) => {
-  const { data: videoDetails } = useQuery<VideoData, Error>({
+  const { data: videoDetails, isLoading } = useQuery<VideoData, Error>({
     queryKey: ["videoDetails", videoId],
     queryFn: () => fetchVideoDetails(videoId, indexId),
     enabled: !!videoId && !!indexId,
@@ -74,7 +74,7 @@ const VideoWithTags: React.FC<{ videoId: string; indexId: string; isAnalyzingTag
   const renderTags = (videoData: VideoData | undefined) => {
     console.log('🏷️ renderTags called with:', videoData);
 
-    // Show loading spinner while analyzing tags
+    // Show loading spinner only when actively analyzing tags (not when fetching existing data)
     if (isAnalyzingTags) {
       return (
         <div className="mt-1 pb-1">
@@ -86,6 +86,12 @@ const VideoWithTags: React.FC<{ videoId: string; indexId: string; isAnalyzingTag
       );
     }
 
+    // If we're loading video data (but not analyzing), show nothing (don't show loading spinner)
+    if (isLoading) {
+      return null;
+    }
+
+    // If we have video data but no user_metadata, show nothing
     if (!videoData || !videoData.user_metadata) {
       console.log('🏷️ No video data or user_metadata');
       return null;
@@ -339,11 +345,26 @@ export default function CreatorBrandMatch() {
     setSimilarResults([]);
     setEmbeddingsReady(false);
 
-    // Analyze brand videos to generate tags
+    // Analyze brand videos to generate tags only if they don't already have user_metadata
     if (sourceType === 'brand' && sourceIndexId) {
-      setIsAnalyzingTags(true);
       try {
-        console.log(`🔄 Analyzing brand video ${videoId} for tag generation...`);
+        // First, fetch video details to check if user_metadata exists
+        console.log(`🔍 Checking if video ${videoId} already has tags...`);
+        const videoDetails = await fetchVideoDetails(videoId, sourceIndexId);
+
+        // Check if user_metadata exists and has meaningful data
+        const hasUserMetadata = videoDetails?.user_metadata &&
+                               Object.keys(videoDetails.user_metadata).length > 0;
+
+        if (hasUserMetadata) {
+          console.log(`✅ Video ${videoId} already has tags, skipping analysis`);
+          return;
+        }
+
+        // Only analyze if no user_metadata exists
+        console.log(`🔄 No tags found, analyzing brand video ${videoId}...`);
+        setIsAnalyzingTags(true);
+
         const response = await axios.post('/api/brand-mentions/analyze', {
           videoId,
           indexId: sourceIndexId,
@@ -355,7 +376,7 @@ export default function CreatorBrandMatch() {
           console.log(`✅ Brand video analysis completed for ${videoId}:`, response.data);
         }
       } catch (error) {
-        console.error(`❌ Error analyzing brand video ${videoId}:`, error);
+        console.error(`❌ Error handling video selection for ${videoId}:`, error);
       } finally {
         setIsAnalyzingTags(false);
       }
