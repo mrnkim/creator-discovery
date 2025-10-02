@@ -683,8 +683,8 @@ export default function SemanticSearchPage() {
   const applyCropAndSearch = async () => {
     let fileToSearch: File;
 
-    // Check if crop is applied
-    if (crop && crop.width && crop.height) {
+    // Check if crop is applied and has valid dimensions
+    if (completedCrop && completedCrop.width && completedCrop.height && completedCrop.width > 0 && completedCrop.height > 0) {
       // Use cropped image
       const croppedFile = await getCroppedImg();
       if (!croppedFile) return;
@@ -940,6 +940,19 @@ export default function SemanticSearchPage() {
                   setImageFile(null);
                   setImageUrl('');
                   setImageSrc('');
+                  setCompletedCrop(null);
+                  setCrop({
+                    unit: '%',
+                    width: 50,
+                    height: 50,
+                    x: 25,
+                    y: 25
+                  });
+                  // Clear search results and reset to default state
+                  setEnhancedResults([]);
+                  setHasSearched(false);
+                  setActiveFilter('all');
+                  setActiveFilters([]);
                 }}
                 className="text-gray-500 hover:text-gray-700"
               >
@@ -954,7 +967,18 @@ export default function SemanticSearchPage() {
         {/* Simple Filters */}
         {enhancedResults.length > 0 && (
           <div className="mb-6">
-            <h2 className="text-lg font-semibold mb-2">Filters</h2>
+            <div className="flex items-center gap-3 mb-2">
+              <h2 className="text-lg font-semibold">Filters</h2>
+              <button
+                onClick={() => {
+                  setActiveFilters([]);
+                  setActiveFilter('all');
+                }}
+                className="text-sm text-gray-600 hover:text-gray-800"
+              >
+                Reset
+              </button>
+            </div>
             <div className="flex flex-wrap gap-2">
               {/* All Results */}
               <button
@@ -962,7 +986,7 @@ export default function SemanticSearchPage() {
                 className={clsx(
                   'px-3 py-1 text-sm rounded-full transition-colors',
                   activeFilter === 'all'
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-gray-700 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 )}
               >
@@ -976,7 +1000,7 @@ export default function SemanticSearchPage() {
                   className={clsx(
                     'px-3 py-1 text-sm rounded-full transition-colors',
                     activeFilter === 'brands'
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-gray-700 text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   )}
                 >
@@ -991,7 +1015,7 @@ export default function SemanticSearchPage() {
                   className={clsx(
                     'px-3 py-1 text-sm rounded-full transition-colors',
                     activeFilter === 'creators'
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-gray-700 text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   )}
                 >
@@ -1005,7 +1029,7 @@ export default function SemanticSearchPage() {
                 className={clsx(
                   'px-3 py-1 text-sm rounded-full',
                   activeFilters.includes('vertical')
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-gray-700 text-white'
                     : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                 )}
               >
@@ -1016,24 +1040,12 @@ export default function SemanticSearchPage() {
                 className={clsx(
                   'px-3 py-1 text-sm rounded-full',
                   activeFilters.includes('horizontal')
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-gray-700 text-white'
                     : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                 )}
               >
                 Horizontal
               </button>
-
-              {/* Clear All Button */}
-              {activeFilters.length > 0 && (
-                <button
-                  onClick={() => {
-                    setActiveFilters([]);
-                  }}
-                  className="px-3 py-1 text-sm rounded-full bg-red-100 text-red-800 hover:bg-red-200"
-                >
-                  Clear All
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -1058,19 +1070,10 @@ export default function SemanticSearchPage() {
             </div>
           ) : filteredResults.length > 0 ? (
             <div>
-              <div className="flex justify-between items-center mb-4">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-semibold">
-                    Search Results
-                  </h2>
-
-                </div>
-                <button
-                  onClick={clearSearch}
-                  className="text-sm text-gray-600 hover:text-gray-800 underline"
-                >
-                  Clear Search
-                </button>
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold">
+                  Search Results
+                </h2>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
