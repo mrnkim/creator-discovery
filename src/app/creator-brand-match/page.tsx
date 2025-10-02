@@ -63,7 +63,7 @@ const BrandTagOverlay: React.FC<{ videoId: string; indexId: string; }> = ({ vide
 };
 
 // Component to render video tags
-const VideoWithTags: React.FC<{ videoId: string; indexId: string; }> = ({ videoId, indexId }) => {
+const VideoWithTags: React.FC<{ videoId: string; indexId: string; isAnalyzingTags?: boolean; }> = ({ videoId, indexId, isAnalyzingTags = false }) => {
   const { data: videoDetails } = useQuery<VideoData, Error>({
     queryKey: ["videoDetails", videoId],
     queryFn: () => fetchVideoDetails(videoId, indexId),
@@ -73,6 +73,19 @@ const VideoWithTags: React.FC<{ videoId: string; indexId: string; }> = ({ videoI
   // Render tags from user_metadata (same as SimilarVideoResults)
   const renderTags = (videoData: VideoData | undefined) => {
     console.log('🏷️ renderTags called with:', videoData);
+
+    // Show loading spinner while analyzing tags
+    if (isAnalyzingTags) {
+      return (
+        <div className="mt-1 pb-1">
+          <div className="flex items-center justify-center py-4">
+            <LoadingSpinner size="sm" className="mr-2" />
+            <span className="text-sm text-gray-600">Analyzing tags...</span>
+          </div>
+        </div>
+      );
+    }
+
     if (!videoData || !videoData.user_metadata) {
       console.log('🏷️ No video data or user_metadata');
       return null;
@@ -328,6 +341,7 @@ export default function CreatorBrandMatch() {
 
     // Analyze brand videos to generate tags
     if (sourceType === 'brand' && sourceIndexId) {
+      setIsAnalyzingTags(true);
       try {
         console.log(`🔄 Analyzing brand video ${videoId} for tag generation...`);
         const response = await axios.post('/api/brand-mentions/analyze', {
@@ -342,6 +356,8 @@ export default function CreatorBrandMatch() {
         }
       } catch (error) {
         console.error(`❌ Error analyzing brand video ${videoId}:`, error);
+      } finally {
+        setIsAnalyzingTags(false);
       }
     }
   };
@@ -682,6 +698,7 @@ export default function CreatorBrandMatch() {
               <VideoWithTags
                 videoId={selectedVideoId}
                 indexId={sourceIndexId}
+                isAnalyzingTags={isAnalyzingTags}
               />
             </div>
           )}

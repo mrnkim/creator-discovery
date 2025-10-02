@@ -921,7 +921,7 @@ export default function SemanticSearchPage() {
 
           {/* Active Search Indicator */}
           {imageSrc && (
-            <div className="mt-4 flex items-center bg-blue-50 p-2 rounded-lg">
+            <div className="mt-4 flex items-center bg-gray-300 p-2 rounded-lg">
               <div className="w-12 h-12 overflow-hidden rounded-md mr-3">
                 <img src={imageSrc} alt="Search" className="w-full h-full object-cover" />
               </div>
