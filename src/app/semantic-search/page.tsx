@@ -36,10 +36,6 @@ const VideoCard = React.memo<{
   getConfidenceClass: (confidence: string) => string;
   getConfidenceStyle: (confidence: string) => { backgroundColor: string };
 }>(({ result, index, brandIndexId, onVideoClick, formatTime, getConfidenceClass, getConfidenceStyle }) => {
-  // Debug logging for re-renders
-  if (index === 0) {
-    console.log('🔍 VideoCard re-rendered - first card of batch');
-  }
 
   return (
     <div
@@ -394,20 +390,12 @@ export default function SemanticSearchPage() {
 
       // Merge without additional sorting to preserve API order
       const allDefaultVideos = [...brandItems, ...creatorItems];
-      console.log('🔍 Default videos loaded:', allDefaultVideos.length);
 
       // Fetch detailed information for each video to get user_metadata
-      console.log('🔍 Fetching detailed information for default videos...');
       const detailedVideos = await Promise.all(
         allDefaultVideos.map(async (video) => {
           try {
-            console.log(`🔍 Fetching details for default video: ${video._id}`);
             const videoDetails = await fetchVideoDetails(video._id, video.index_id);
-            console.log(`🔍 Default video details loaded:`, {
-              videoId: video._id,
-              hasUserMetadata: !!videoDetails?.user_metadata,
-              userMetadataKeys: videoDetails?.user_metadata ? Object.keys(videoDetails.user_metadata) : []
-            });
             return { ...video, ...videoDetails };
           } catch (error) {
             console.error(`Error fetching details for default video ${video._id}:`, error);
@@ -416,7 +404,6 @@ export default function SemanticSearchPage() {
         })
       );
 
-      console.log('🔍 Setting default videos with details:', detailedVideos.length);
       setDefaultVideos(detailedVideos);
     } catch (error) {
       console.error('Error fetching default videos:', error);
@@ -430,7 +417,6 @@ export default function SemanticSearchPage() {
   const handleTextSearch = async () => {
     if (!searchQuery.trim()) return;
 
-    console.log('🔍 handleTextSearch called with query:', searchQuery);
     searchClearedRef.current = false; // Reset the cleared flag
     setIsSearching(true);
     setError(null); // Clear any previous errors
@@ -438,29 +424,14 @@ export default function SemanticSearchPage() {
     setHasSearched(true); // Mark that a search has been performed
 
     try {
-      console.log('🔍 Making API request to /api/search/text...');
       const response = await axios.post('/api/search/text', {
         query: searchQuery,
         scope: 'all',
         page_limit: 24
       });
 
-      console.log('🔍 API response received:', response.status);
-      console.log('🔍 Response data:', response.data);
 
       if (response.data && response.data.data) {
-        console.log('🔍 Search response received:');
-        console.log('  - Total items:', response.data.data.length);
-        console.log('  - Response structure:', {
-          hasData: !!response.data.data,
-          dataLength: response.data.data.length,
-          firstItem: response.data.data[0] ? {
-            video_id: response.data.data[0].video_id,
-            index_id: response.data.data[0].index_id,
-            confidence: response.data.data[0].confidence
-          } : null
-        });
-
         // Separate results by index
         const allResults: SearchResult[] = [];
         const brandResults: SearchResult[] = [];
@@ -494,12 +465,6 @@ export default function SemanticSearchPage() {
 
         const totalAll = totalBrands + totalCreators;
 
-        console.log('🔍 Total results from API:');
-        console.log('  - Total all:', totalAll);
-        console.log('  - Total brands:', totalBrands);
-        console.log('  - Total creators:', totalCreators);
-        console.log('  - Page info:', response.data.pageInfoByIndex);
-
         setTotalResults({
           all: totalAll,
           brands: totalBrands,
@@ -507,7 +472,6 @@ export default function SemanticSearchPage() {
         });
 
         // 🔧 PERFORMANCE FIX: Single state update
-        console.log('🔍 Setting enhancedResults with', allResults.length, 'items');
         setEnhancedResults(allResults);
         setCurrentPage(1);
         setNextPageTokens(response.data.nextPageTokens || {});
@@ -520,12 +484,9 @@ export default function SemanticSearchPage() {
 
         setHasMoreResults(hasMore);
 
-        console.log('🔍 About to fetch video details for', allResults.length, 'results');
         // Fetch video details for all results
         await fetchVideoDetailsForResults(allResults);
       } else {
-        console.log('🔍 No search results found in response.data.data');
-        console.log('🔍 Full response structure:', response.data);
         setEnhancedResults([]);
         setTotalResults({ all: 0, brands: 0, creators: 0 });
         setHasMoreResults(false);
@@ -555,20 +516,12 @@ export default function SemanticSearchPage() {
 
   // Fetch video details for search results
   const fetchVideoDetailsForResults = async (results: SearchResult[], isLoadMore = false) => {
-    console.log('🔍 fetchVideoDetailsForResults called with', results.length, 'results, isLoadMore:', isLoadMore);
     try {
-      console.log('🔍 Starting to fetch video details for each result...');
       const updatedResults = await Promise.all(
         results.map(async (result, index) => {
           try {
-            console.log(`🔍 Fetching details for video ${index + 1}/${results.length}: ${result.video_id}`);
             const indexId = result.index_id;
             const videoDetails = await fetchVideoDetails(result.video_id, indexId);
-            console.log(`🔍 Successfully fetched details for video ${result.video_id}:`, {
-              hasVideoDetails: !!videoDetails,
-              hasHls: !!videoDetails?.hls,
-              hasUserMetadata: !!videoDetails?.user_metadata
-            });
 
             // Determine format based on width and height
             let format: 'vertical' | 'horizontal' | undefined;
@@ -586,20 +539,9 @@ export default function SemanticSearchPage() {
         })
       );
 
-      // Check if search was cleared while we were fetching details
-      if (searchClearedRef.current) {
-        console.log('🔍 Search was cleared while fetching details, skipping update');
-        return;
-      }
-
       if (!isLoadMore) {
         // Only update enhancedResults for initial search, not for load more
-        console.log('🔍 fetchVideoDetailsForResults completed, updating enhancedResults with', updatedResults.length, 'items');
-        console.log('🔍 Updated results sample:', updatedResults.slice(0, 2));
         setEnhancedResults(updatedResults);
-        console.log('🔍 enhancedResults state updated');
-      } else {
-        console.log('🔍 fetchVideoDetailsForResults completed for load more, not updating enhancedResults directly');
       }
 
       return updatedResults;
@@ -610,7 +552,6 @@ export default function SemanticSearchPage() {
   };
   // 🔧 PERFORMANCE FIX: Memoize format filter toggle
   const toggleFormatFilter = useCallback((filter: FacetFilter) => {
-    console.log('🔍 toggleFormatFilter called:', filter);
     setActiveFilters(prev => {
       if (prev.includes(filter)) {
         return prev.filter(f => f !== filter);
@@ -623,8 +564,6 @@ export default function SemanticSearchPage() {
 
   // 🔧 PERFORMANCE FIX: Memoize filtered and sorted results
   const filteredResults = useMemo(() => {
-    console.log('🔍 Filtering results - enhancedResults.length:', enhancedResults.length, 'activeFilter:', activeFilter, 'activeFilters:', activeFilters);
-    console.log('🔍 enhancedResults sample:', enhancedResults.slice(0, 2));
 
     let results = enhancedResults;
 
