@@ -276,9 +276,13 @@ const Video: React.FC<EnhancedVideoProps> = ({
             ) : (
               <div className="absolute inset-0">
                 <img
-                  src={finalVideoDetails?.hls?.thumbnail_urls?.[0] || '/videoFallback.jpg'}
+                  src={finalVideoDetails?.hls?.thumbnail_urls?.[0] || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgdmlld0JveD0iMCAwIDMyMCAxODAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMjAiIGhlaWdodD0iMTgwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNDAgODBMMTYwIDEwMEgxNDBWODBaIiBmaWxsPSIjOUI5QjlCIi8+CjxwYXRoIGQ9Ik0xNDAgODBMMTIwIDEwMEgxNDBWODBaIiBmaWxsPSIjOUI5QjlCIi8+Cjwvc3ZnPgo='}
                   className="object-cover w-full h-full"
                   alt="thumbnail"
+                  onError={(e) => {
+                    console.warn('Thumbnail failed to load, using placeholder');
+                    e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIwIiBoZWlnaHQ9IjE4MCIgdmlld0JveD0iMCAwIDMyMCAxODAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMjAiIGhlaWdodD0iMTgwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNDAgODBMMTYwIDEwMEgxNDBWODBaIiBmaWxsPSIjOUI5QjlCIi8+CjxwYXRoIGQ9Ik0xNDAgODBMMTIwIDEwMEgxNDBWODBaIiBmaWxsPSIjOUI5QjlCIi8+Cjwvc3ZnPgo=';
+                  }}
                 />
               </div>
             )}

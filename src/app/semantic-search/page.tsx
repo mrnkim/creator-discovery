@@ -159,6 +159,10 @@ export default function SemanticSearchPage() {
     title: string;
     start?: number;
     end?: number;
+    videoDetails?: VideoDetails;
+    indexId?: string;
+    confidence?: string;
+    score?: number;
   } | null>(null);
 
   // 🔧 NEW: Total results count from API
@@ -378,6 +382,7 @@ export default function SemanticSearchPage() {
         return;
       }
 
+      console.log('🔍 Fetching default videos...');
       // Fetch both in parallel and merge
       const [brandRes, creatorRes] = await Promise.all([
         axios.get('/api/videos', { params: { index_id: brandIndexId, limit: 12, page: 1 } }),
@@ -388,7 +393,31 @@ export default function SemanticSearchPage() {
       const creatorItems: DefaultVideoItem[] = (creatorRes.data?.data || []).map((v: VideoDetails) => ({ ...v, index_id: creatorIndexId }));
 
       // Merge without additional sorting to preserve API order
-      setDefaultVideos([...brandItems, ...creatorItems]);
+      const allDefaultVideos = [...brandItems, ...creatorItems];
+      console.log('🔍 Default videos loaded:', allDefaultVideos.length);
+
+      // Fetch detailed information for each video to get user_metadata
+      console.log('🔍 Fetching detailed information for default videos...');
+      const detailedVideos = await Promise.all(
+        allDefaultVideos.map(async (video) => {
+          try {
+            console.log(`🔍 Fetching details for default video: ${video._id}`);
+            const videoDetails = await fetchVideoDetails(video._id, video.index_id);
+            console.log(`🔍 Default video details loaded:`, {
+              videoId: video._id,
+              hasUserMetadata: !!videoDetails?.user_metadata,
+              userMetadataKeys: videoDetails?.user_metadata ? Object.keys(videoDetails.user_metadata) : []
+            });
+            return { ...video, ...videoDetails };
+          } catch (error) {
+            console.error(`Error fetching details for default video ${video._id}:`, error);
+            return video; // Return original video if details fetch fails
+          }
+        })
+      );
+
+      console.log('🔍 Setting default videos with details:', detailedVideos.length);
+      setDefaultVideos(detailedVideos);
     } catch (error) {
       console.error('Error fetching default videos:', error);
       setDefaultError('Failed to load videos');
@@ -409,11 +438,15 @@ export default function SemanticSearchPage() {
     setHasSearched(true); // Mark that a search has been performed
 
     try {
+      console.log('🔍 Making API request to /api/search/text...');
       const response = await axios.post('/api/search/text', {
         query: searchQuery,
         scope: 'all',
         page_limit: 24
       });
+
+      console.log('🔍 API response received:', response.status);
+      console.log('🔍 Response data:', response.data);
 
       if (response.data && response.data.data) {
         console.log('🔍 Search response received:');
@@ -474,6 +507,7 @@ export default function SemanticSearchPage() {
         });
 
         // 🔧 PERFORMANCE FIX: Single state update
+        console.log('🔍 Setting enhancedResults with', allResults.length, 'items');
         setEnhancedResults(allResults);
         setCurrentPage(1);
         setNextPageTokens(response.data.nextPageTokens || {});
@@ -486,9 +520,15 @@ export default function SemanticSearchPage() {
 
         setHasMoreResults(hasMore);
 
-
+        console.log('🔍 About to fetch video details for', allResults.length, 'results');
         // Fetch video details for all results
         await fetchVideoDetailsForResults(allResults);
+      } else {
+        console.log('🔍 No search results found in response.data.data');
+        console.log('🔍 Full response structure:', response.data);
+        setEnhancedResults([]);
+        setTotalResults({ all: 0, brands: 0, creators: 0 });
+        setHasMoreResults(false);
       }
     } catch (error) {
       console.error('Error performing text search:', error);
@@ -517,11 +557,18 @@ export default function SemanticSearchPage() {
   const fetchVideoDetailsForResults = async (results: SearchResult[], isLoadMore = false) => {
     console.log('🔍 fetchVideoDetailsForResults called with', results.length, 'results, isLoadMore:', isLoadMore);
     try {
+      console.log('🔍 Starting to fetch video details for each result...');
       const updatedResults = await Promise.all(
-        results.map(async (result) => {
+        results.map(async (result, index) => {
           try {
+            console.log(`🔍 Fetching details for video ${index + 1}/${results.length}: ${result.video_id}`);
             const indexId = result.index_id;
             const videoDetails = await fetchVideoDetails(result.video_id, indexId);
+            console.log(`🔍 Successfully fetched details for video ${result.video_id}:`, {
+              hasVideoDetails: !!videoDetails,
+              hasHls: !!videoDetails?.hls,
+              hasUserMetadata: !!videoDetails?.user_metadata
+            });
 
             // Determine format based on width and height
             let format: 'vertical' | 'horizontal' | undefined;
@@ -548,7 +595,9 @@ export default function SemanticSearchPage() {
       if (!isLoadMore) {
         // Only update enhancedResults for initial search, not for load more
         console.log('🔍 fetchVideoDetailsForResults completed, updating enhancedResults with', updatedResults.length, 'items');
+        console.log('🔍 Updated results sample:', updatedResults.slice(0, 2));
         setEnhancedResults(updatedResults);
+        console.log('🔍 enhancedResults state updated');
       } else {
         console.log('🔍 fetchVideoDetailsForResults completed for load more, not updating enhancedResults directly');
       }
@@ -575,6 +624,7 @@ export default function SemanticSearchPage() {
   // 🔧 PERFORMANCE FIX: Memoize filtered and sorted results
   const filteredResults = useMemo(() => {
     console.log('🔍 Filtering results - enhancedResults.length:', enhancedResults.length, 'activeFilter:', activeFilter, 'activeFilters:', activeFilters);
+    console.log('🔍 enhancedResults sample:', enhancedResults.slice(0, 2));
 
     let results = enhancedResults;
 
@@ -784,7 +834,11 @@ export default function SemanticSearchPage() {
              result.videoDetails.system_metadata?.video_title ||
              `Video ${result.video_id}`,
       start: result.start,
-      end: result.end
+      end: result.end,
+      videoDetails: result.videoDetails,
+      indexId: result.index_id,
+      confidence: result.confidence,
+      score: result.score
     });
   };
 
@@ -795,6 +849,8 @@ export default function SemanticSearchPage() {
       videoId: video._id,
       videoUrl: video.hls.video_url,
       title: video.system_metadata?.filename || video.system_metadata?.video_title || `Video ${video._id}`,
+      videoDetails: video,
+      indexId: video.index_id,
     });
   };
 
@@ -1364,6 +1420,10 @@ export default function SemanticSearchPage() {
           title={selectedVideo.title}
           startTime={selectedVideo.start}
           endTime={selectedVideo.end}
+          videoDetails={selectedVideo.videoDetails}
+          indexId={selectedVideo.indexId}
+          confidence={selectedVideo.confidence}
+          score={selectedVideo.score}
         />
       )}
     </div>
