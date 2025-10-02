@@ -861,11 +861,15 @@ export default function SemanticSearchPage() {
                 <div className="self-stretch h-14 px-3 bg-gray-200 rounded-2xl inline-flex justify-start items-center gap-2.5 overflow-hidden w-full">
                   <div className="flex-1 self-stretch px-3 flex justify-start items-center gap-5">
                     {/* left area - search icon */}
-                    <div className="flex justify-start items-center">
+                    <button
+                      type="button"
+                      onClick={handleTextSearch}
+                      className="flex justify-start items-center cursor-pointer hover:opacity-70 transition-opacity"
+                    >
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-stone-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                       </svg>
-                    </div>
+                    </button>
 
                     {/* input field */}
                     <div className="flex-1 flex items-center relative">
