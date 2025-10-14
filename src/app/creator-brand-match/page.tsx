@@ -72,7 +72,6 @@ const VideoWithTags: React.FC<{ videoId: string; indexId: string; isAnalyzingTag
 
   // Render tags from user_metadata (same as SimilarVideoResults)
   const renderTags = (videoData: VideoData | undefined) => {
-    console.log('🏷️ renderTags called with:', videoData);
 
     // Show loading spinner only when actively analyzing tags (not when fetching existing data)
     if (isAnalyzingTags) {
@@ -93,7 +92,6 @@ const VideoWithTags: React.FC<{ videoId: string; indexId: string; isAnalyzingTag
 
     // If we have video data but no user_metadata, show nothing
     if (!videoData || !videoData.user_metadata) {
-      console.log('🏷️ No video data or user_metadata');
       return null;
     }
 
@@ -230,11 +228,8 @@ const VideoWithTags: React.FC<{ videoId: string; indexId: string; isAnalyzingTag
 
       // Return null if no valid tags found
       if (combinedTags.length === 0) {
-        console.log('🏷️ No valid tags found');
         return null;
       }
-
-      console.log('🏷️ Found tags:', combinedTags);
 
       return (
         <div className="mt-1 pb-1">
@@ -349,7 +344,6 @@ export default function CreatorBrandMatch() {
     if (sourceType === 'brand' && sourceIndexId) {
       try {
         // First, fetch video details to check if user_metadata exists
-        console.log(`🔍 Checking if video ${videoId} already has tags...`);
         const videoDetails = await fetchVideoDetails(videoId, sourceIndexId);
 
         // Check if user_metadata exists and has meaningful data
@@ -357,12 +351,10 @@ export default function CreatorBrandMatch() {
                                Object.keys(videoDetails.user_metadata).length > 0;
 
         if (hasUserMetadata) {
-          console.log(`✅ Video ${videoId} already has tags, skipping analysis`);
           return;
         }
 
         // Only analyze if no user_metadata exists
-        console.log(`🔄 No tags found, analyzing brand video ${videoId}...`);
         setIsAnalyzingTags(true);
 
         const response = await axios.post('/api/brand-mentions/analyze', {
@@ -373,7 +365,6 @@ export default function CreatorBrandMatch() {
         });
 
         if (response.data && response.data.events) {
-          console.log(`✅ Brand video analysis completed for ${videoId}:`, response.data);
         }
       } catch (error) {
         console.error(`❌ Error handling video selection for ${videoId}:`, error);
@@ -413,10 +404,6 @@ export default function CreatorBrandMatch() {
     try {
       // Use target videos from React Query cache
       const targetVideosToProcess = targetVideos.length > 0 ? targetVideos : [];
-
-      console.log(`🎯 Starting match finding for video: ${selectedVideoId}`);
-      console.log(`📊 Processing ${targetVideosToProcess.length} target videos`);
-
       // Check and ensure embeddings for source and target videos
       setIsLoadingEmbeddings(true);
       setIsProcessingTargetEmbeddings(true);
@@ -430,8 +417,6 @@ export default function CreatorBrandMatch() {
         true
       );
       const embeddingTime = Date.now() - startTime;
-
-      console.log(`⏱️ Embedding processing took: ${embeddingTime}ms`);
 
       setTargetEmbeddingsProgress({
         processed: embeddingResult.processedCount,
@@ -448,7 +433,6 @@ export default function CreatorBrandMatch() {
       }
 
       // Run searches in parallel for better performance
-      console.log('🔍 Starting parallel searches...');
       const searchStartTime = Date.now();
 
       const [textResults, videoResults] = await Promise.all([
@@ -457,12 +441,10 @@ export default function CreatorBrandMatch() {
       ]);
 
       const searchTime = Date.now() - searchStartTime;
-      console.log(`⏱️ Search processing took: ${searchTime}ms`);
 
       // Combine results with a boost for videos that appear in both searches
       const combinedResults = combineSearchResults(textResults, videoResults);
 
-      console.log(`✅ Found ${combinedResults.length} total matches`);
       setSimilarResults(combinedResults);
     } catch (error) {
       console.error('❌ Error finding matches:', error);

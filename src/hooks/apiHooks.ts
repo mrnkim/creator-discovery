@@ -21,7 +21,6 @@ const FAILED_VIDEO_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
  */
 export function clearFailedVideoCache(): void {
   failedVideoCache.clear();
-  console.log('🧹 Cleared failed video cache');
 }
 
 /**
@@ -72,7 +71,6 @@ export async function fetchVideoDetailsWithRetry(
 
       // Calculate delay with exponential backoff
       const delay = baseDelay * Math.pow(2, attempt);
-      console.log(`⏳ Retrying fetch for video ${videoId} in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
 
       await new Promise(resolve => setTimeout(resolve, delay));
     }
@@ -136,7 +134,6 @@ export async function fetchVideoDetails(
   // Check if this video has failed recently
   const failedCache = failedVideoCache.get(cacheKey);
   if (failedCache && (now - failedCache.timestamp) < FAILED_VIDEO_CACHE_DURATION) {
-    console.log(`🚫 Skipping fetch for known missing video: ${videoId}`);
     throw new Error(`Video ${videoId} not found (cached failure)`);
   }
 
@@ -185,12 +182,10 @@ export async function checkVideoVectorsExist(
   // Check cache first
   const cached = vectorExistenceCache.get(cacheKey);
   if (cached && (now - cached.timestamp) < CACHE_DURATION) {
-    console.log(`🎯 Cache hit for vector existence: ${videoId}`);
     return cached.exists;
   }
 
   try {
-    console.log(`🔍 Checking vector existence: ${videoId}`);
     const response = await axios.get('/api/vectors/exists', {
       params: {
         video_id: videoId,
@@ -292,9 +287,6 @@ export async function checkAndEnsureEmbeddings(
     const MAX_CONCURRENT = 5; // Increased concurrency
     let processedCount = 0;
     const totalCount = targetVideos.length;
-
-    console.log(`🚀 Processing ${totalCount} target videos with concurrency limit: ${MAX_CONCURRENT}`);
-
     // First, check which videos need embedding processing
     const videosToProcess: VideoData[] = [];
 
@@ -318,9 +310,6 @@ export async function checkAndEnsureEmbeddings(
         processedCount++;
       });
     }
-
-    console.log(`📊 Found ${videosToProcess.length} videos that need embedding processing`);
-
     // Process videos that need embeddings
     for (let i = 0; i < videosToProcess.length; i += MAX_CONCURRENT) {
       const batch = videosToProcess.slice(i, i + MAX_CONCURRENT);
@@ -328,8 +317,6 @@ export async function checkAndEnsureEmbeddings(
       await Promise.all(batch.map(async (video) => {
         try {
           const targetVideoId = video._id;
-          console.log(`🔄 Processing embedding for video: ${targetVideoId}`);
-
           // Fetch video with embeddings
           const videoWithEmbedding = await fetchVideoDetails(targetVideoId, targetIndexId, true);
 
@@ -339,7 +326,6 @@ export async function checkAndEnsureEmbeddings(
                             `video_${targetVideoId}`;
 
             await storeVectors(targetVideoId, videoName, videoWithEmbedding.embedding, targetIndexId);
-            console.log(`✅ Successfully processed embedding for video: ${targetVideoId}`);
           } else {
             console.warn(`⚠️ No embedding data found for video: ${targetVideoId}`);
           }

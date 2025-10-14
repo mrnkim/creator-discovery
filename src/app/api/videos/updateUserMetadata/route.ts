@@ -16,13 +16,6 @@ export async function PUT(request: NextRequest) {
     const body: UserMetadataUpdateRequest = await request.json();
     const { videoId, indexId, user_metadata } = body;
 
-    console.log('📥 Received updateUserMetadata request:', {
-      videoId,
-      indexId,
-      user_metadata,
-      timestamp: new Date().toISOString()
-    });
-
     // Validate required parameters
     if (!videoId || !indexId) {
       console.error('❌ Missing required parameters:', { videoId, indexId });
@@ -65,21 +58,8 @@ export async function PUT(request: NextRequest) {
       body: JSON.stringify(requestBody)
     };
 
-    console.log('🚀 Making request to TwelveLabs API:', {
-      url,
-      method: 'PUT',
-      headers: options.headers,
-      body: requestBody
-    });
-
     // Call Twelve Labs API
     const response = await fetch(url, options);
-
-    console.log('📥 TwelveLabs API response:', {
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries())
-    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -92,7 +72,6 @@ export async function PUT(request: NextRequest) {
 
     // For 204 No Content response, don't try to parse JSON
     if (response.status === 204) {
-      console.log('✅ Successfully updated metadata (204 No Content)');
       return NextResponse.json({
         success: true,
         message: 'Video metadata updated successfully'
@@ -102,14 +81,12 @@ export async function PUT(request: NextRequest) {
     // For other success responses, try to parse JSON
     try {
       const responseData = await response.json();
-      console.log('✅ Successfully updated metadata with response data:', responseData);
       return NextResponse.json({
         success: true,
         message: 'Video metadata updated successfully',
         data: responseData
       });
     } catch (parseError) {
-      console.log('✅ Successfully updated metadata (JSON parse failed, but operation succeeded)');
       return NextResponse.json({
         success: true,
         message: 'Video metadata updated successfully'

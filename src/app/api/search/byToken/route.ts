@@ -56,12 +56,6 @@ export async function GET(request: NextRequest) {
     // Call the Twelve Labs API with the page token
     // According to the API docs: GET https://api.twelvelabs.io/v1.3/search/:page-token
     const url = `${apiBaseUrl}/search/${pageToken}`;
-
-    console.log('🔍 byToken API Request:');
-    console.log('  - URL:', url);
-    console.log('  - Page token:', pageToken);
-    console.log('  - Index ID:', indexId);
-
     const response = await axios.get(url, {
       headers: {
         "accept": "application/json",
@@ -73,12 +67,6 @@ export async function GET(request: NextRequest) {
     });
 
     const responseData = response.data;
-
-    console.log('🔍 byToken API Response:');
-    console.log('  - Status:', response.status);
-    console.log('  - Data length:', responseData?.data?.length || 0);
-    console.log('  - Page info:', responseData?.page_info);
-    console.log('  - Search pool:', responseData?.search_pool);
 
     if (!responseData || !responseData.data) {
       return NextResponse.json(

@@ -47,7 +47,6 @@ export async function POST(request: NextRequest) {
         if (videoResponse.ok) {
           const videoData = await videoResponse.json();
           videoDuration = videoData.system_metadata?.duration || 0;
-          console.log(`📹 Video duration: ${videoDuration} seconds`);
         }
       } catch (error) {
         console.warn('⚠️ Failed to get video duration:', error);
@@ -139,7 +138,6 @@ export async function POST(request: NextRequest) {
       })
     };
 
-    console.log(`🔍 Analyzing video ${videoId} for brand mentions...`);
     const analyzeResponse = await fetch(analyzeUrl, analyzeOptions);
 
     if (!analyzeResponse.ok) {
@@ -153,25 +151,21 @@ export async function POST(request: NextRequest) {
 
     // Parse response text
     const responseText = await analyzeResponse.text();
-    console.log(`📝 Raw API response for video ${videoId}:`, responseText.substring(0, 500) + (responseText.length > 500 ? '...' : ''));
 
     let parsedEvents: unknown[] = [];
     let videoAnalysis: VideoAnalysisMetadata = {};
 
     // Check if response is empty
     if (!responseText || responseText.trim() === '') {
-      console.log(`ℹ️ Empty response for video ${videoId}`);
       return NextResponse.json({ events: [], analysis: videoAnalysis });
     }
 
     try {
       // First attempt: parse the entire response as JSON
       const responseObj = JSON.parse(responseText);
-      console.log(`✅ Successfully parsed JSON response for video ${videoId}`);
 
       // Check if the response has a 'data' field containing JSON string
       if (responseObj && typeof responseObj.data === 'string') {
-        console.log(`🔍 Found 'data' field, parsing nested JSON for video ${videoId}`);
         const nestedData = JSON.parse(responseObj.data);
 
         // Handle new structure with products, tones, styles, creator
@@ -186,7 +180,6 @@ export async function POST(request: NextRequest) {
           // Fallback to array format
           parsedEvents = Array.isArray(nestedData) ? nestedData : [];
         }
-        console.log(`✅ Successfully parsed nested JSON data for video ${videoId}`);
       } else if (responseObj && typeof responseObj === 'object') {
         // Handle new structure directly
         if (responseObj.products !== undefined) {
@@ -203,7 +196,6 @@ export async function POST(request: NextRequest) {
           console.warn(`⚠️ Unexpected response structure for video ${videoId}:`, responseObj);
           parsedEvents = [];
         }
-        console.log(`✅ Using direct object response for video ${videoId}`);
       } else {
         console.warn(`⚠️ Unexpected response structure for video ${videoId}:`, responseObj);
         parsedEvents = [];
@@ -230,10 +222,8 @@ export async function POST(request: NextRequest) {
             // Treat as legacy array format
             parsedEvents = [parsed];
           }
-          console.log(`✅ Successfully extracted JSON object for video ${videoId}`);
         } else if (arrayMatch) {
           parsedEvents = JSON.parse(arrayMatch[0]);
-          console.log(`✅ Successfully extracted JSON array for video ${videoId}`);
         } else {
           throw new Error('No valid JSON found in response');
         }
@@ -242,7 +232,6 @@ export async function POST(request: NextRequest) {
         console.error(`📄 Full response text:`, responseText);
 
         // Return empty results instead of error to avoid blocking the process
-        console.log(`⚠️ Returning empty results for video ${videoId} due to parsing issues`);
         return NextResponse.json({ events: [], analysis: videoAnalysis });
       }
     }
@@ -256,16 +245,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Convert to ProductEvent[] format with type safety
-    const events: ProductEvent[] = parsedEvents.map((item, index) => {
+    const events: ProductEvent[] = parsedEvents.map((item) => {
       // Type guard for item properties
       const eventItem = item as Record<string, unknown>;
       const timeline = Array.isArray(eventItem.timeline) ? eventItem.timeline : [0, 0];
-
-      console.log(`🔍 Parsing event ${index} for video ${videoId}:`, {
-        original_item: eventItem,
-        timeline: timeline,
-        location: eventItem.location
-      });
 
       return {
         video_id: videoId,
@@ -286,12 +269,10 @@ export async function POST(request: NextRequest) {
       console.warn(`⚠️ Skipping validation for video ${videoId} and proceeding with events`);
       // Don't return error, just log and continue - validation might be too strict
     } else {
-      console.log(`✅ Events validation passed for video ${videoId}`);
     }
 
     // Skip deduplication for now to preserve individual events
     const deduplicatedEvents = events;
-    console.log(`✅ Found ${deduplicatedEvents.length} brand mentions (deduplication skipped)`);
 
     // Validate video analysis metadata
     const analysisValidationResult = VideoAnalysisMetadataSchema.safeParse(videoAnalysis);
@@ -299,8 +280,6 @@ export async function POST(request: NextRequest) {
       console.warn(`⚠️ Video analysis validation failed for video ${videoId}:`, analysisValidationResult.error.format());
       // Use empty analysis if validation fails
       videoAnalysis = {};
-    } else {
-      console.log(`✅ Video analysis validation passed for video ${videoId}`);
     }
 
     // Save to user_metadata
@@ -312,12 +291,6 @@ export async function POST(request: NextRequest) {
       video_styles: videoAnalysis.styles ? JSON.stringify(videoAnalysis.styles) : undefined,
       video_creator: videoAnalysis.creator || undefined
     };
-
-    console.log(`💾 Saving metadata for video ${videoId}:`, {
-      brand_product_events: metadata.brand_product_events,
-      event_count: deduplicatedEvents.length,
-      events: deduplicatedEvents
-    });
 
     // Update video metadata
     const updateUrl = `${TWELVELABS_API_BASE_URL}/indexes/${indexId}/videos/${videoId}`;
@@ -338,9 +311,7 @@ export async function POST(request: NextRequest) {
       const errorText = await updateResponse.text();
       console.error(`❌ Failed to update metadata: ${updateResponse.status} - ${errorText}`);
       // Continue anyway to return the events
-    } else {
-      console.log(`✅ Updated metadata for video ${videoId}`);
-    }
+    } 
 
     // Return the events and analysis
     return NextResponse.json({

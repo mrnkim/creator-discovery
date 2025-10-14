@@ -129,7 +129,6 @@ export default function AdminPage() {
             force: true,
             segmentAnalysis: true,
           });
-          console.log(`✅ Analyzed video ${i + 1}/${creatorVideos.length}: ${video._id}`);
         } catch (error) {
           console.error(`❌ Failed to analyze video ${video._id}:`, error);
           // Continue with next video instead of stopping

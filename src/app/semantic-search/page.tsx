@@ -186,20 +186,13 @@ export default function SemanticSearchPage() {
 
   // 🔧 PERFORMANCE FIX: Simplified toggle filter function
   const toggleFilter = useCallback((filter: 'all' | 'brands' | 'creators') => {
-    console.log('🔍 toggleFilter called:', filter);
     setActiveFilter(filter);
   }, []);
 
   // 🔧 PERFORMANCE FIX: Simplified load more results function based on reference code
   const loadMoreResults = useCallback(async () => {
-    console.log('🔍 loadMoreResults called:');
-    console.log('  - hasMoreResults:', hasMoreResults);
-    console.log('  - isLoadingMore:', isLoadingMore);
-    console.log('  - currentPage:', currentPage);
-    console.log('  - nextPageTokens:', nextPageTokens);
 
     if (!hasMoreResults || isLoadingMore) {
-      console.log('❌ Load more blocked - hasMoreResults:', hasMoreResults, 'isLoadingMore:', isLoadingMore);
       return;
     }
 
@@ -211,9 +204,6 @@ export default function SemanticSearchPage() {
 
       const brandToken = nextPageTokens[brandIndexId!];
       const creatorToken = nextPageTokens[creatorIndexId!];
-
-      console.log('🔍 Available tokens:', { brandToken, creatorToken });
-
       // Make parallel requests for both indices if tokens exist
       const requests = [];
 
@@ -232,7 +222,6 @@ export default function SemanticSearchPage() {
       }
 
       if (requests.length === 0) {
-        console.log('❌ No tokens available for load more');
         setHasMoreResults(false);
         return;
       }
@@ -243,7 +232,6 @@ export default function SemanticSearchPage() {
 
       responses.forEach(({ indexId, data }) => {
         if (data && data.data && indexId) {
-          console.log(`🔍 Results from ${indexId}:`, data.data.length);
           newResults.push(...data.data);
           newTokens[indexId] = data.pageInfo?.next_page_token || null;
         }
@@ -253,7 +241,6 @@ export default function SemanticSearchPage() {
       const newResultsWithDetails = await fetchVideoDetailsForResults(newResults, true);
 
       if (newResultsWithDetails && newResultsWithDetails.length > 0) {
-        console.log('🔍 Adding new results:', newResultsWithDetails.length);
 
         // 🔧 PERFORMANCE FIX: Single state update with duplicate check
         setEnhancedResults(prev => {
@@ -267,7 +254,6 @@ export default function SemanticSearchPage() {
           });
 
           const updated = [...prev, ...uniqueNewResults];
-          console.log('🔍 Updated enhancedResults:', prev.length, '->', updated.length);
           return updated;
         });
 
@@ -345,7 +331,6 @@ export default function SemanticSearchPage() {
 
   // Clear search state
   const clearSearch = useCallback(() => {
-    console.log('🔍 clearSearch called');
     searchClearedRef.current = true; // Mark that search was cleared
     setSearchQuery('');
     setImageFile(null);
@@ -363,7 +348,6 @@ export default function SemanticSearchPage() {
     if (searchInputRef.current) {
       searchInputRef.current.value = '';
     }
-    console.log('🔍 clearSearch completed - enhancedResults and filters should be empty');
   }, []);
 
   // Fetch default videos (shown when no search results)
@@ -378,7 +362,6 @@ export default function SemanticSearchPage() {
         return;
       }
 
-      console.log('🔍 Fetching default videos...');
       // Fetch both in parallel and merge
       const [brandRes, creatorRes] = await Promise.all([
         axios.get('/api/videos', { params: { index_id: brandIndexId, limit: 12, page: 1 } }),
@@ -830,7 +813,6 @@ export default function SemanticSearchPage() {
   // 🔧 PERFORMANCE FIX: Use useInView hook for infinite scroll trigger
   useEffect(() => {
     if (inView && !isLoadingMore && hasMoreResults) {
-      console.log('🔍 Intersection observer triggered - loading more results');
       loadMoreResults();
     }
   }, [inView, isLoadingMore, hasMoreResults, loadMoreResults]);

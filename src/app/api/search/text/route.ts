@@ -52,12 +52,6 @@ export async function POST(request: NextRequest) {
 
     const { query, scope, page_limit = 12, page = 1 }: SearchRequest = await request.json();
 
-    console.log('🔍 API Search Request:');
-    console.log('  - Query:', query);
-    console.log('  - Scope:', scope);
-    console.log('  - Page limit:', page_limit);
-    console.log('  - Page:', page);
-
     if (!query) {
       return NextResponse.json(
         { error: "Search query is required" },
@@ -110,7 +104,6 @@ export async function POST(request: NextRequest) {
 
           // Handle specific error cases
           if (response.status === 500 && retryCount < maxRetries) {
-            console.log(`Retrying API call for index ${indexId} (attempt ${retryCount + 1}/${maxRetries + 1})`);
             await new Promise(resolve => setTimeout(resolve, retryDelay));
             return retryApiCall(indexId, retryCount + 1);
           } else if (response.status === 500) {
@@ -140,7 +133,6 @@ export async function POST(request: NextRequest) {
         };
       } catch (error) {
         if (error instanceof Error && error.message.includes('500') && retryCount < maxRetries) {
-          console.log(`Retrying API call for index ${indexId} due to 500 error (attempt ${retryCount + 1}/${maxRetries + 1})`);
           await new Promise(resolve => setTimeout(resolve, retryDelay));
           return retryApiCall(indexId, retryCount + 1);
         }
@@ -178,15 +170,6 @@ export async function POST(request: NextRequest) {
 
     // Sort merged results by score in descending order
     mergedResults.sort((a, b) => b.score - a.score);
-
-    console.log('🔍 API Search Response:');
-    console.log('  - Total merged results:', mergedResults.length);
-    console.log('  - Page info by index:', pageInfoByIndex);
-    console.log('  - First result:', mergedResults[0] ? {
-      video_id: mergedResults[0].video_id,
-      index_id: mergedResults[0].index_id,
-      score: mergedResults[0].score
-    } : null);
 
     // Return the search results as a JSON response
     return NextResponse.json({

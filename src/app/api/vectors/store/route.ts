@@ -153,8 +153,6 @@ export async function POST(request: Request) {
       const batchSize = 100;
       const totalBatches = Math.ceil(vectors.length / batchSize);
 
-      console.log(`🚀 Starting vector upload with ${totalBatches} batches...`);
-
       for (let i = 0; i < vectors.length; i += batchSize) {
         const batch = vectors.slice(i, i + batchSize);
         const batchNumber = Math.floor(i / batchSize) + 1;
@@ -170,7 +168,6 @@ export async function POST(request: Request) {
 
           // Perform the actual upsert
           await index.upsert(batch);
-          console.log(`✅ Batch ${batchNumber}/${totalBatches} uploaded successfully`);
         } catch (error) {
           console.error(`❌ Error in batch ${batchNumber}:`, error);
           throw error;

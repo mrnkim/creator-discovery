@@ -169,7 +169,6 @@ const Video: React.FC<EnhancedVideoProps> = ({
   const { data: videoDetails, isLoading, error } = useQuery<VideoDetails, Error>({
     queryKey: ["videoDetails", videoId],
     queryFn: () => {
-      console.log('🎬 Fetching video details for:', { videoId, indexId });
       if (!videoId) {
         throw new Error("Video ID is missing");
       }

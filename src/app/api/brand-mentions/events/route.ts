@@ -34,7 +34,6 @@ export async function GET(request: NextRequest) {
       try {
         const { events, analysis } = await getEventsFromMetadata(videoId, indexId);
         if (events && events.length > 0) {
-          console.log(`✅ Retrieved ${events.length} cached brand mention events for video ${videoId}`);
           return NextResponse.json({ events, analysis });
         }
       } catch (error) {
@@ -44,7 +43,6 @@ export async function GET(request: NextRequest) {
     }
 
     // If no cached events or force=true, call analyze endpoint
-    console.log(`🔍 No cached events found or force=true, analyzing video ${videoId}...`);
     const analyzeResponse = await fetch(new URL('/api/brand-mentions/analyze', request.url).toString(), {
       method: 'POST',
       headers: {
@@ -180,16 +178,10 @@ async function getEventsFromMetadata(videoId: string, indexId: string): Promise<
 
   const videoDetail = await response.json();
 
-  console.log(`🔍 Video details for ${videoId}:`, {
-    user_metadata: videoDetail.user_metadata,
-    brand_product_events_raw: videoDetail.user_metadata?.brand_product_events
-  });
-
   // Check if brand_product_events exists in user_metadata
   if (videoDetail.user_metadata?.brand_product_events) {
     try {
       const events = JSON.parse(videoDetail.user_metadata.brand_product_events);
-      console.log(`📊 Parsed events for ${videoId}:`, events);
 
       // Validate events with schema
       const validationResult = ProductEventArraySchema.safeParse(events);

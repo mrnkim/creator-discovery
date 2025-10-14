@@ -31,8 +31,6 @@ export async function POST(req: Request) {
       vector: new Array(1024).fill(0)
     });
 
-    console.log(`🔍 Found ${originalClipQuery.matches.length} clips for video ${videoId}`);
-
     // If we found matching clips, search for similar videos for each match
     const similarResults = [];
     if (originalClipQuery.matches.length > 0) {

@@ -66,7 +66,6 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps & { sourceType?: 'b
               errorMessage.includes('not found') ||
               errorMessage.includes('cached failure')
             ) {
-              console.log(`📝 Video ${videoId} not found, excluding from results`);
               invalidVideoIds.add(videoId);
               return null;
             } else {
@@ -98,7 +97,6 @@ const SimilarVideoResults: React.FC<SimilarVideoResultsProps & { sourceType?: 'b
           // Log cache status for debugging
           const cacheSize = getFailedVideoCacheSize();
           if (cacheSize > 0) {
-            console.log(`💾 Failed video cache contains ${cacheSize} entries`);
           }
         }
       } catch (error) {
