@@ -229,6 +229,13 @@ const Video: React.FC<EnhancedVideoProps> = ({
       console.warn('Failed to parse brand_product_events:', error);
     }
 
+    // Fallback: use brand_override if available
+    const override = (videoData.user_metadata as unknown as Record<string, unknown>)?.brand_override;
+    if (typeof override === 'string') {
+      const trimmed = override.trim();
+      if (trimmed.length > 0) return trimmed;
+    }
+
     return null;
   };
 

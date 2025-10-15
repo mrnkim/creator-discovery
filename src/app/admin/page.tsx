@@ -10,6 +10,7 @@ type AdminVideo = {
   hls?: { video_url?: string; thumbnail_urls?: string[] };
   system_metadata?: { filename?: string; video_title?: string; duration?: number };
   index_id: string;
+  user_metadata?: Record<string, unknown>;
 };
 
 export default function AdminPage() {
@@ -21,6 +22,8 @@ export default function AdminPage() {
   const [videos, setVideos] = useState<AdminVideo[]>([]);
   const [filter, setFilter] = useState<'all' | 'brand' | 'creator'>('all');
   const [search, setSearch] = useState('');
+  const [brandEdits, setBrandEdits] = useState<Record<string, string>>({});
+  const [savingBrandId, setSavingBrandId] = useState<string | null>(null);
 
   const brandIndexId = process.env.NEXT_PUBLIC_BRAND_INDEX_ID || '';
   const creatorIndexId = process.env.NEXT_PUBLIC_CREATOR_INDEX_ID || '';
@@ -42,12 +45,14 @@ export default function AdminPage() {
           hls: v.hls,
           system_metadata: v.system_metadata,
           index_id: brandIndexId,
+          user_metadata: v.user_metadata as unknown as Record<string, unknown>,
         }));
         const cItems: AdminVideo[] = ((creatorRes.data?.data as VideoData[]) || []).map((v: VideoData) => ({
           _id: v._id,
           hls: v.hls,
           system_metadata: v.system_metadata,
           index_id: creatorIndexId,
+          user_metadata: v.user_metadata as unknown as Record<string, unknown>,
         }));
         setVideos([...bItems, ...cItems]);
       } catch (err: unknown) {
@@ -147,6 +152,45 @@ export default function AdminPage() {
     }
   };
 
+  const saveBrandOverride = async (videoId: string, indexId: string) => {
+    const brandName = (brandEdits[videoId] || '').trim();
+    if (!brandName) {
+      setMessage('Please enter a brand name');
+      return;
+    }
+    setSavingBrandId(videoId);
+    setMessage(null);
+    try {
+      const payload = {
+        videoId,
+        indexId,
+        user_metadata: {
+          brand_override: brandName,
+        },
+      };
+      const res = await axios.put('/api/videos/updateUserMetadata', payload, {
+        timeout: 30000,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (res.data?.success) {
+        setVideos(prev => prev.map(v => v._id === videoId ? {
+          ...v,
+          user_metadata: {
+            ...(v.user_metadata || {}),
+            brand_override: brandName,
+          },
+        } : v));
+        setMessage('Brand override saved');
+      } else {
+        setMessage(res.data?.error || 'Failed to save brand override');
+      }
+    } catch (e) {
+      setMessage('Failed to save brand override');
+    } finally {
+      setSavingBrandId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white">
       <main className="container mx-auto px-4 py-8">
@@ -239,6 +283,33 @@ export default function AdminPage() {
                         {v.index_id === brandIndexId ? 'Brand' : 'Creator'}
                       </span>
                     </div>
+                    {v.index_id === brandIndexId && (
+                      <div className="space-y-2">
+                        <label className="block text-xs text-gray-600">Brand override</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={brandEdits[v._id] ?? (typeof v.user_metadata?.brand_override === 'string' ? String(v.user_metadata?.brand_override) : '')}
+                            onChange={(e) => setBrandEdits(prev => ({ ...prev, [v._id]: e.target.value }))}
+                            placeholder="Enter brand name"
+                            className="flex-1 px-2 py-1 text-sm border rounded"
+                          />
+                          <button
+                            onClick={() => saveBrandOverride(v._id, v.index_id)}
+                            disabled={savingBrandId === v._id}
+                            className={clsx(
+                              'px-2 py-1 text-xs rounded',
+                              savingBrandId === v._id ? 'bg-gray-300 text-gray-600 cursor-wait' : 'bg-black text-white hover:bg-gray-800'
+                            )}
+                          >
+                            {savingBrandId === v._id ? 'Saving...' : 'Save'}
+                          </button>
+                        </div>
+                        {typeof v.user_metadata?.brand_override === 'string' && v.user_metadata?.brand_override && (
+                          <div className="text-xs text-gray-500">Current: {String(v.user_metadata.brand_override)}</div>
+                        )}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <button
                         onClick={async () => {

@@ -42,8 +42,24 @@ const BrandTagOverlay: React.FC<{ videoId: string; indexId: string; }> = ({ vide
           }
         }
       }
+      // Fallback: use brand_override from user_metadata if present
+      const maybeOverride = (videoData.user_metadata as Record<string, unknown>)?.brand_override;
+      if (typeof maybeOverride === 'string') {
+        const trimmed = maybeOverride.trim();
+        if (trimmed.length > 0) {
+          return trimmed;
+        }
+      }
     } catch (error) {
       console.warn('Failed to parse brand_product_events:', error);
+      // Even if parsing fails, still try override
+      const maybeOverride = (videoData.user_metadata as Record<string, unknown>)?.brand_override;
+      if (typeof maybeOverride === 'string') {
+        const trimmed = maybeOverride.trim();
+        if (trimmed.length > 0) {
+          return trimmed;
+        }
+      }
     }
 
     return null;
