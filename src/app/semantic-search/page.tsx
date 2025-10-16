@@ -666,8 +666,22 @@ export default function SemanticSearchPage() {
       setImageSrc(URL.createObjectURL(croppedFile));
     } else {
       // Use original image
-      if (!imageFile) return;
-      fileToSearch = imageFile;
+      if (imageFile) {
+        fileToSearch = imageFile;
+      } else if (imageUrl) {
+        // Handle URL-based image by converting to File
+        try {
+          const response = await fetch(imageUrl);
+          const blob = await response.blob();
+          const fileName = imageUrl.split('/').pop() || 'image.jpg';
+          fileToSearch = new File([blob], fileName, { type: blob.type });
+        } catch (error) {
+          console.error('Error fetching image from URL:', error);
+          return;
+        }
+      } else {
+        return;
+      }
     }
 
     setIsCropModalOpen(false);
