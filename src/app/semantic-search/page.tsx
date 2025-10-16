@@ -676,6 +676,7 @@ export default function SemanticSearchPage() {
     setIsSearching(true);
     setEnhancedResults([]);
     setHasSearched(true); // Mark that a search has been performed
+    setNextPageTokens({}); // Clear pagination tokens from previous text search
 
     try {
       const formData = new FormData();
@@ -726,7 +727,7 @@ export default function SemanticSearchPage() {
         setEnhancedResults(allResults);
 
         // Fetch video details
-        fetchVideoDetailsForResults(allResults);
+        await fetchVideoDetailsForResults(allResults);
       }
     } catch (error) {
       console.error('Error performing image search:', error);
