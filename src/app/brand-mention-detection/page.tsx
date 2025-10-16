@@ -356,41 +356,6 @@ export default function BrandMentionDetectionPage() {
     }
   }
 
-  // Force analyze a single video
-  async function forceAnalyzeVideo(videoId: string) {
-    if (!creatorIndexId) return;
-
-    setIsAnalyzing(true);
-
-    try {
-      const response = await axios.post('/api/brand-mentions/analyze', {
-        videoId,
-        indexId: creatorIndexId,
-        force: true,
-        segmentAnalysis: true  // Enable segment-based analysis for better coverage
-      });
-
-      if (response.data && response.data.events) {
-        setEventsByVideo(prevEvents => ({
-          ...prevEvents,
-          [videoId]: response.data.events
-        }));
-
-        if (response.data.analysis) {
-          setAnalysisByVideo(prevAnalysis => ({
-            ...prevAnalysis,
-            [videoId]: response.data.analysis
-          }));
-        }
-
-      }
-    } catch (error) {
-      console.error(`❌ Error force analyzing video ${videoId}:`, error);
-      setError(`Failed to analyze video: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  }
 
   // Update creator for a video
   async function updateVideoCreator(videoId: string, newCreator: string) {
