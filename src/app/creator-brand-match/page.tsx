@@ -339,11 +339,11 @@ export default function CreatorBrandMatch() {
     setSimilarResults([]);
     setEmbeddingsReady(false);
 
-    // Analyze brand videos to generate tags
-    if (sourceType === 'brand' && sourceIndexId) {
+    // Analyze videos to generate tags (both brand and creator)
+    if (sourceIndexId) {
       setIsAnalyzingTags(true);
       try {
-        console.log(`🔄 Analyzing brand video ${videoId} for tag generation...`);
+        console.log(`🔄 Analyzing ${sourceType} video ${videoId} for tag generation...`);
         const response = await axios.post('/api/brand-mentions/analyze', {
           videoId,
           indexId: sourceIndexId,
@@ -352,10 +352,10 @@ export default function CreatorBrandMatch() {
         });
 
         if (response.data && response.data.events) {
-          console.log(`✅ Brand video analysis completed for ${videoId}:`, response.data);
+          console.log(`✅ ${sourceType} video analysis completed for ${videoId}:`, response.data);
         }
       } catch (error) {
-        console.error(`❌ Error analyzing brand video ${videoId}:`, error);
+        console.error(`❌ Error analyzing ${sourceType} video ${videoId}:`, error);
       } finally {
         setIsAnalyzingTags(false);
       }
@@ -547,8 +547,34 @@ export default function CreatorBrandMatch() {
     if (videosData?.pages?.[0]?.data?.[0] && !selectedVideoId) {
       const firstVideo = videosData.pages[0].data[0];
       setSelectedVideoId(firstVideo._id);
+
+      // Trigger analysis for the auto-selected video
+      if (sourceIndexId) {
+        setIsAnalyzingTags(true);
+        const analyzeVideo = async () => {
+          try {
+            console.log(`🔄 Auto-analyzing ${sourceType} video ${firstVideo._id} for tag generation...`);
+            const response = await axios.post('/api/brand-mentions/analyze', {
+              videoId: firstVideo._id,
+              indexId: sourceIndexId,
+              force: true,
+              segmentAnalysis: true
+            });
+
+            if (response.data && response.data.events) {
+              console.log(`✅ Auto-analysis completed for ${sourceType} video ${firstVideo._id}:`, response.data);
+            }
+          } catch (error) {
+            console.error(`❌ Error auto-analyzing ${sourceType} video ${firstVideo._id}:`, error);
+          } finally {
+            setIsAnalyzingTags(false);
+          }
+        };
+
+        analyzeVideo();
+      }
     }
-  }, [videosData, selectedVideoId]);
+  }, [videosData, selectedVideoId, sourceIndexId, sourceType]);
 
   // Dismiss status messages
   const dismissMessage = () => {
