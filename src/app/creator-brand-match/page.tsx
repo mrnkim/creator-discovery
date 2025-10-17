@@ -339,25 +339,33 @@ export default function CreatorBrandMatch() {
     setSimilarResults([]);
     setEmbeddingsReady(false);
 
-    // Analyze videos to generate tags (both brand and creator)
+    // Analyze videos to generate tags (both brand and creator) - only if not already analyzed
     if (sourceIndexId) {
-      setIsAnalyzingTags(true);
-      try {
-        console.log(`🔄 Analyzing ${sourceType} video ${videoId} for tag generation...`);
-        const response = await axios.post('/api/brand-mentions/analyze', {
-          videoId,
-          indexId: sourceIndexId,
-          force: true,
-          segmentAnalysis: true
-        });
+      // Check if video is already analyzed by looking at the current video data
+      const currentVideo = videosData?.pages.flatMap((page: { data: VideoData[]; }) => page.data)
+        .find((video: VideoData) => video._id === videoId);
 
-        if (response.data && response.data.events) {
-          console.log(`✅ ${sourceType} video analysis completed for ${videoId}:`, response.data);
+      if (!currentVideo?.user_metadata || !currentVideo.user_metadata.brand_product_analyzed_at) {
+        setIsAnalyzingTags(true);
+        try {
+          console.log(`🔄 Analyzing unanalyzed ${sourceType} video ${videoId} for tag generation...`);
+          const response = await axios.post('/api/brand-mentions/analyze', {
+            videoId,
+            indexId: sourceIndexId,
+            force: true,
+            segmentAnalysis: true
+          });
+
+          if (response.data && response.data.events) {
+            console.log(`✅ ${sourceType} video analysis completed for ${videoId}:`, response.data);
+          }
+        } catch (error) {
+          console.error(`❌ Error analyzing ${sourceType} video ${videoId}:`, error);
+        } finally {
+          setIsAnalyzingTags(false);
         }
-      } catch (error) {
-        console.error(`❌ Error analyzing ${sourceType} video ${videoId}:`, error);
-      } finally {
-        setIsAnalyzingTags(false);
+      } else {
+        console.log(`✅ ${sourceType} video ${videoId} already analyzed, skipping analysis`);
       }
     }
   };
@@ -548,12 +556,12 @@ export default function CreatorBrandMatch() {
       const firstVideo = videosData.pages[0].data[0];
       setSelectedVideoId(firstVideo._id);
 
-      // Trigger analysis for the auto-selected video
-      if (sourceIndexId) {
+      // Only trigger analysis if the video doesn't have user_metadata (not analyzed yet)
+      if (sourceIndexId && (!firstVideo.user_metadata || !firstVideo.user_metadata.brand_product_analyzed_at)) {
         setIsAnalyzingTags(true);
         const analyzeVideo = async () => {
           try {
-            console.log(`🔄 Auto-analyzing ${sourceType} video ${firstVideo._id} for tag generation...`);
+            console.log(`🔄 Auto-analyzing unanalyzed ${sourceType} video ${firstVideo._id} for tag generation...`);
             const response = await axios.post('/api/brand-mentions/analyze', {
               videoId: firstVideo._id,
               indexId: sourceIndexId,
@@ -572,6 +580,8 @@ export default function CreatorBrandMatch() {
         };
 
         analyzeVideo();
+      } else if (firstVideo.user_metadata && firstVideo.user_metadata.brand_product_analyzed_at) {
+        console.log(`✅ ${sourceType} video ${firstVideo._id} already analyzed, skipping auto-analysis`);
       }
     }
   }, [videosData, selectedVideoId, sourceIndexId, sourceType]);
