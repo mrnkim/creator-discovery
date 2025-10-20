@@ -356,8 +356,8 @@ export default function CreatorBrandMatch() {
     setSimilarResults([]);
     setEmbeddingsReady(false);
 
-    // Analyze brand videos to generate tags only if they don't already have user_metadata
-    if (sourceType === 'brand' && sourceIndexId) {
+    // Analyze videos to generate tags only if they don't already have user_metadata
+    if (sourceIndexId) {
       try {
         // First, fetch video details to check if user_metadata exists
         const videoDetails = await fetchVideoDetails(videoId, sourceIndexId);
@@ -565,7 +565,8 @@ export default function CreatorBrandMatch() {
   useEffect(() => {
     if (videosData?.pages?.[0]?.data?.[0] && !selectedVideoId) {
       const firstVideo = videosData.pages[0].data[0];
-      setSelectedVideoId(firstVideo._id);
+      // Trigger full selection flow so tags/analyze run immediately
+      handleVideoChange(firstVideo._id);
     }
   }, [videosData, selectedVideoId]);
 
