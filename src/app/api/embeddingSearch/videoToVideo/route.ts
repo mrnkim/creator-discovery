@@ -25,7 +25,7 @@ export async function POST(req: Request) {
         tl_video_id: videoId,
         scope: 'clip'
       },
-      topK: 10, // Reduced from 100 to 10 for better performance
+      topK: 10, 
       includeMetadata: true,
       includeValues: true,
       vector: new Array(1024).fill(0)

@@ -13,7 +13,7 @@ import ErrorFallback from '@/components/ErrorFallback';
 import { ErrorBoundary } from 'react-error-boundary';
 
 // Number of time buckets for heatmap visualization
-const NUM_BUCKETS = 50; // Increased for better granularity
+const NUM_BUCKETS = 50;
 
 // Minimal shape we read from analysis payload
 type VideoAnalysis = {
@@ -50,7 +50,6 @@ export default function BrandMentionDetectionPage() {
   const [viewMode, setViewMode] = useState<'library' | 'per-video'>('library');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isEventsLoading, setIsEventsLoading] = useState<boolean>(false);
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditingCreator, setIsEditingCreator] = useState<boolean>(false);
   const [editingCreator, setEditingCreator] = useState<string>('');
@@ -314,42 +313,6 @@ export default function BrandMentionDetectionPage() {
       }
     } catch (error) {
       console.error('Error fetching brand mention events:', error);
-      // Don't set global error, just log it
-    } finally {
-      setIsEventsLoading(false);
-    }
-  }
-
-  // Fetch events for a single video
-  async function fetchEventsForVideo(videoId: string) {
-    if (!creatorIndexId) return;
-
-    setIsEventsLoading(true);
-
-    try {
-      const response = await axios.get('/api/brand-mentions/events', {
-        params: {
-          videoId,
-          indexId: creatorIndexId,
-          force: true  // Force reanalysis to get fresh data
-        }
-      });
-
-      if (response.data && response.data.events) {
-        setEventsByVideo(prevEvents => ({
-          ...prevEvents,
-          [videoId]: response.data.events
-        }));
-
-        if (response.data.analysis) {
-          setAnalysisByVideo(prevAnalysis => ({
-            ...prevAnalysis,
-            [videoId]: response.data.analysis as VideoAnalysis
-          }));
-        }
-      }
-    } catch (error) {
-      console.error(`Error fetching events for video ${videoId}:`, error);
       // Don't set global error, just log it
     } finally {
       setIsEventsLoading(false);
@@ -626,7 +589,6 @@ export default function BrandMentionDetectionPage() {
         const label = video ?
           (video.user_metadata?.creator ||
            video.user_metadata?.video_creator ||
-           video.user_metadata?.creator_id ||
            video.system_metadata?.video_title ||
            "Unknown Creator") :
           row.video_id;
@@ -658,14 +620,6 @@ export default function BrandMentionDetectionPage() {
       const events = filteredEvents[selectedVideoId] || [];
       const videoDuration = videoDurations[selectedVideoId] || 0;
       const perVideoRows = aggregatePerVideo(events, NUM_BUCKETS, 'brand', videoDuration);
-
-      // Log the actual heatmap data for Emirates
-      const emiratesHeatmapRow = perVideoRows.find(row => row.key === 'Emirates');
-      if (emiratesHeatmapRow) {
-        const nonZeroBuckets = emiratesHeatmapRow.buckets
-          .map((bucket, index) => ({ index, ...bucket }))
-          .filter(bucket => bucket.value > 0);
-      }
 
       const rowsWithTotal = perVideoRows.map(row => ({
         id: row.key,

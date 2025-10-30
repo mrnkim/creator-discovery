@@ -424,7 +424,6 @@ export default function CreatorBrandMatch() {
       setIsLoadingEmbeddings(true);
       setIsProcessingTargetEmbeddings(true);
 
-      const startTime = Date.now();
       const embeddingResult = await checkAndEnsureEmbeddings(
         selectedVideoId,
         sourceIndexId,
@@ -432,7 +431,6 @@ export default function CreatorBrandMatch() {
         targetVideosToProcess,
         true
       );
-      const embeddingTime = Date.now() - startTime;
 
       setTargetEmbeddingsProgress({
         processed: embeddingResult.processedCount,
@@ -449,14 +447,11 @@ export default function CreatorBrandMatch() {
       }
 
       // Run searches in parallel for better performance
-      const searchStartTime = Date.now();
-
       const [textResults, videoResults] = await Promise.all([
         textToVideoEmbeddingSearch(selectedVideoId, sourceIndexId, targetIndexId),
         videoToVideoEmbeddingSearch(selectedVideoId, sourceIndexId, targetIndexId)
       ]);
 
-      const searchTime = Date.now() - searchStartTime;
 
       // Combine results with a boost for videos that appear in both searches
       const combinedResults = combineSearchResults(textResults, videoResults);

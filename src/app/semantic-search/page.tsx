@@ -161,16 +161,13 @@ export default function SemanticSearchPage() {
     score?: number;
   } | null>(null);
 
-  // 🔧 NEW: Total results count from API
   const [totalResults, setTotalResults] = useState<{
     all: number;
     brands: number;
     creators: number;
   }>({ all: 0, brands: 0, creators: 0 });
 
-  // Simple filter states - just toggle between all/brands/creators results
   const [activeFilter, setActiveFilter] = useState<'all' | 'brands' | 'creators'>('all');
-
   // 🔧 PERFORMANCE FIX: Simplified pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(24);
